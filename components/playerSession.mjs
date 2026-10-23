@@ -12,8 +12,12 @@ export function createPlayerSession() {
   };
 }
 
+// Some PoseLandmarker builds return x/y/z without a visibility score. Missing
+// metadata is not a zero-confidence detection. Always require valid in-frame
+// coordinates, and enforce the confidence threshold when a score is supplied.
 const visible = p => p && Number.isFinite(p.x) && Number.isFinite(p.y)
-  && (p.visibility ?? 0) >= 0.6 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+  && (p.visibility == null || (Number.isFinite(p.visibility) && p.visibility >= 0.6))
+  && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
 const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const distance = (a, b, aspect) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 const inArea = (x, expanded = false) => x >= (expanded ? PLAY_AREA.exitLeft : PLAY_AREA.left)
@@ -43,12 +47,21 @@ export function inspectPose(landmarks, aspect = 1) {
   const [left, right] = [landmarks?.[11], landmarks?.[12]];
   const shouldersVisible = [left, right].every(visible);
   const hipsVisible = [landmarks?.[23], landmarks?.[24]].every(visible);
-  const confidence = indices => indices.map(i => number(landmarks?.[i]?.visibility)).join(' / ');
+  const confidence = indices => {
+    const points = indices.map(i => landmarks?.[i]);
+    const scores = points.map(p => !p ? 'landmark missing' : p.visibility == null
+      ? 'not supplied' : number(p.visibility)).join(' / ');
+    const invalid = points.flatMap((p, i) => p && (!Number.isFinite(p.x) || !Number.isFinite(p.y)
+      || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)
+      ? [(i ? 'R' : 'L') + ' X/Y ' + number(p.x) + '/' + number(p.y) + ' outside frame'] : []);
+    return 'Confidence L/R: ' + scores + '; need ≥ 0.600 when supplied; '
+      + 'missing score uses coordinates' + (invalid.length ? '; ' + invalid.join('; ') : '');
+  };
   const checks = [
     check('shoulders', 'Both shoulders visible', shouldersVisible,
-      'Confidence L/R: ' + confidence([11, 12]) + '; need ≥ 0.600 and inside frame'),
+      confidence([11, 12])),
     check('hips', 'Both hips visible', hipsVisible,
-      'Confidence L/R: ' + confidence([23, 24]) + '; need ≥ 0.600 and inside frame')
+      confidence([23, 24]))
   ];
   if (!shouldersVisible || !Number.isFinite(aspect) || aspect <= 0) {
     for (const [id, label] of [['width', 'Shoulder size'], ['torso', 'Torso upright'],

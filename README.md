@@ -75,6 +75,12 @@ setup checks are informational because calibration is locked.
 Send a screenshot of the panel while standing in position to diagnose a blocked
 calibration. Hide it with **DEBUG ON** when visitors are playing.
 
+Some PoseLandmarker builds return landmark coordinates without visibility scores.
+The debug panel labels these scores **not supplied**. Those landmarks use valid,
+in-frame coordinates for eligibility; an explicitly supplied visibility score must
+still be at least 0.6. Missing landmarks or invalid/out-of-frame coordinates are
+always rejected.
+
 ```sh
 npm test
 npm run typecheck
