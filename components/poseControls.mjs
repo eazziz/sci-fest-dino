@@ -1,5 +1,7 @@
 // Positions use image coordinates: positive offsets point DOWN.
-export const ZONES = { jump: -0.25, duck: 0.35, neutralTop: -0.10, neutralBottom: 0.20 };
+// Duck is deeper than the natural pre-jump squat (~0.3–0.4) so winding up for a jump
+// neither ducks nor disarms the jump.
+export const ZONES = { jump: -0.25, duck: 0.45, neutralTop: -0.10, neutralBottom: 0.20 };
 
 export function createControls() {
   return { ready: false, samples: [], baseline: 0, width: 0, offset: 0,
