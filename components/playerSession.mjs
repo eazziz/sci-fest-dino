@@ -3,7 +3,16 @@ import { createControls, loseTracking, updateControls } from './poseControls.mjs
 // Camera coordinates, independent of the display's letterboxing / mirrored view.
 // Keep these together so the on-screen area and player selection agree.
 export const PLAY_AREA = { left: 0.30, right: 0.70, exitLeft: 0.18, exitRight: 0.82 };
-export const SESSION_TIMING = { settle: 1000, frameGap: 300, departure: 1800 };
+export const SESSION_TIMING = { settle: 1000, frameGap: 300, departure: 1800, grace: 500 };
+
+// Identity limits once calibrated, relative to the player's calibrated size. One-sided
+// on purpose: ducking / leaning toward the camera makes the player look BIGGER, while
+// anyone standing behind them is farther away and always looks SMALLER.
+export const MATCH_LIMITS = {
+  shoulderMin: 0.8, shoulderMax: 2.0,   // shoulder width vs calibrated
+  hipWidthMin: 0.7, hipWidthMax: 2.2,   // hip width vs calibrated (noisier, so looser)
+  hipMoveX: 0.75, hipMoveY: 1.0         // hip travel per update, in shoulder widths
+};
 
 export function createPlayerSession() {
   return {
@@ -69,6 +78,8 @@ export function inspectPose(landmarks, aspect = 1) {
   const width = distance(left, right, aspect);
   const hip = hipsVisible ? midpoint(landmarks[23], landmarks[24]) : null;
   const torso = hip ? distance(shoulder, hip, aspect) : null;
+  // Unlike torso length, hip width barely changes when bending forward to duck.
+  const hipWidth = hip ? distance(landmarks[23], landmarks[24], aspect) : null;
   checks.push(
     check('width', 'Shoulder size', width >= 0.06 && width <= 0.65,
       number(width) + '; allowed 0.060–0.650 (image-height units)'),
@@ -87,7 +98,7 @@ export function inspectPose(landmarks, aspect = 1) {
   );
   const upright = checks.every(c => c.status !== 'fail' && c.status !== 'wait');
   return { pose: width < 0.06 || width > 0.65 ? null
-    : { landmarks, x: shoulder.x, y: shoulder.y, width, hip, torso, upright }, checks };
+    : { landmarks, x: shoulder.x, y: shoulder.y, width, hip, torso, hipWidth, upright }, checks };
 }
 
 export function describePose(landmarks, aspect = 1) {
@@ -100,33 +111,49 @@ function clearCalibration(session) {
   session.progress = 0;
 }
 
-function trackChecks(track, p, aspect) {
+// `calibrated` switches to the duck-tolerant, passer-by-strict limits. Before that the
+// player may still be walking to the floor marker, so size is allowed to shrink more.
+function trackChecks(track, p, aspect, calibrated = false) {
   const dx = Math.abs(p.x - track.x) * aspect / track.width;
   const dy = Math.abs(p.y - track.y) / track.width;
   const scale = p.width / track.anchorWidth;
-  const torsoScale = p.torso && track.anchorTorso ? p.torso / track.anchorTorso : 1;
+  const [sMin, sMax] = calibrated ? [MATCH_LIMITS.shoulderMin, MATCH_LIMITS.shoulderMax] : [0.6, 1.65];
+  const hips = Boolean(p.hip && track.hip);
+  const hipDx = hips ? Math.abs(p.hip.x - track.hip.x) * aspect / track.width : NaN;
+  const hipDy = hips ? Math.abs(p.hip.y - track.hip.y) / track.width : NaN;
+  const hipScale = p.hipWidth && track.anchorHipWidth ? p.hipWidth / track.anchorHipWidth : NaN;
+  const range = (v, lo, hi) => number(v) + '; allowed ' + number(lo) + '–' + number(hi);
   return {
     score: dx * 2 + dy * 0.35 + Math.abs(Math.log(scale)),
     checks: [
       check('trackX', 'Player match: horizontal', dx <= 0.75, number(dx) + ' ≤ 0.750 shoulder widths'),
       check('trackY', 'Player match: vertical', dy <= 1.4, number(dy) + ' ≤ 1.400 shoulder widths'),
-      check('trackScale', 'Player match: shoulder size', scale >= 0.6 && scale <= 1.65, number(scale) + '; allowed 0.600–1.650'),
-      check('trackTorso', 'Player match: torso size', torsoScale >= 0.55 && torsoScale <= 1.7,
-        p.torso && track.anchorTorso ? number(torsoScale) + '; allowed 0.550–1.700' : 'Torso unavailable; size check bypassed')
+      check('trackScale', 'Player match: shoulder size', scale >= sMin && scale <= sMax, range(scale, sMin, sMax)),
+      check('trackHips', 'Player match: hips stayed put', hips
+        ? hipDx <= MATCH_LIMITS.hipMoveX && hipDy <= MATCH_LIMITS.hipMoveY : 'skip',
+        hips ? 'moved ' + number(hipDx) + ' / ' + number(hipDy) + ' ≤ ' + number(MATCH_LIMITS.hipMoveX)
+          + ' / ' + number(MATCH_LIMITS.hipMoveY) + ' shoulder widths' : 'Hips unavailable; check bypassed'),
+      check('trackHipWidth', 'Player match: hip size', Number.isFinite(hipScale)
+        ? hipScale >= MATCH_LIMITS.hipWidthMin && hipScale <= MATCH_LIMITS.hipWidthMax : 'skip',
+        Number.isFinite(hipScale) ? range(hipScale, MATCH_LIMITS.hipWidthMin, MATCH_LIMITS.hipWidthMax)
+          : 'Hips unavailable; check bypassed')
     ]
   };
 }
 
-function matchPlayer(track, candidates, aspect) {
+function matchPlayer(track, candidates, aspect, calibrated) {
   // Detection order is not identity. Use the previous location and acquired scale.
+  let leftArea = false;
   const matches = candidates.flatMap(p => {
-    const match = trackChecks(track, p, aspect);
-    if (!inArea(p.x, true) || match.checks.some(c => c.status === 'fail')) return [];
+    const match = trackChecks(track, p, aspect, calibrated);
+    if (match.checks.some(c => c.status === 'fail')) return [];
+    // The player is visibly there but walked out: that is leaving, not a detection blip.
+    if (!inArea(p.x, true)) { leftArea = true; return []; }
     return [{ pose: p, score: match.score }];
   }).sort((a, b) => a.score - b.score);
   const ambiguous = matches.length > 1 && matches[1].score - matches[0].score < 0.3;
   return { pose: ambiguous ? null : matches[0]?.pose ?? null,
-    eligibleCount: matches.length, ambiguous,
+    eligibleCount: matches.length, ambiguous, leftArea,
     margin: matches.length > 1 ? matches[1].score - matches[0].score : null, minMargin: 0.3 };
 }
 
@@ -208,12 +235,13 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
       if (hadTrack) report.checks.push(check('trackingArea', 'Inside tracking area',
         inArea(report.pose.x, true), 'Torso center X ' + number(report.pose.x) + '; allowed '
           + PLAY_AREA.exitLeft + '–' + PLAY_AREA.exitRight),
-        ...trackChecks(session.track, report.pose, aspect).checks);
+        ...trackChecks(session.track, report.pose, aspect, session.controls.ready).checks);
     }
     return { ...report, index };
   });
   const candidates = reports.map(r => r.pose).filter(Boolean);
-  const selection = hadTrack ? matchPlayer(session.track, candidates, aspect) : acquirePlayer(candidates);
+  const selection = hadTrack ? matchPlayer(session.track, candidates, aspect, session.controls.ready)
+    : acquirePlayer(candidates);
   const pose = selection.pose;
   const focus = reports.find(r => r.pose && r.pose === pose) ?? [...reports].sort((a, b) => {
     const x = r => r.pose?.x ?? ((poses[r.index]?.[11]?.x ?? 0) + (poses[r.index]?.[12]?.x ?? 0)) / 2;
@@ -226,6 +254,24 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
       selection.ambiguous ? 'Ambiguous: score gap ' + number(selection.margin) + ' < ' + selection.minMargin
       : selection.eligibleCount + ' eligible candidate(s)'));
   if (focus) result.debug.checks.push(...focus.checks);
+  // Grace hold: mid-round, if the player simply vanished from detection (deep duck,
+  // motion blur), keep their last state briefly instead of pausing. Nobody else is
+  // matched or given control during the hold, and it never applies when another
+  // plausible person overlaps (ambiguous) or the player visibly walked out.
+  const held = !pose && playing && session.controls.ready && session.track
+    && selection.eligibleCount === 0 && !selection.leftArea
+    && time - session.lastSeen <= SESSION_TIMING.grace;
+  result.debug.checks.push(check('grace', 'Brief-loss grace hold', !pose && playing && session.track
+    ? held : 'skip', !pose && session.track ? Math.round(time - session.lastSeen) + ' ms unseen; hold up to '
+      + SESSION_TIMING.grace + ' ms' : 'Not needed'));
+  if (held) {
+    session.phase = 'playing';
+    result.phase = session.phase;
+    result.tracked = true;
+    result.duck = session.controls.pose === 'duck';
+    result.message = result.duck ? 'DUCK — stay low for birds' : 'RUN — jump over cacti, duck under birds';
+    return finish();
+  }
   if (!pose) {
     if (session.controls.samples.length) resetReason('Selected player missing or ambiguous');
     loseTracking(session.controls);
@@ -241,11 +287,12 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
   }
 
   if (!session.track) {
-    session.track = { ...pose, anchorWidth: pose.width, anchorTorso: pose.torso };
+    session.track = { ...pose, anchorWidth: pose.width, anchorHipWidth: pose.hipWidth };
   } else {
     session.track.x = pose.x;
     session.track.y = pose.y;
     session.track.width = pose.width;
+    if (pose.hip) session.track.hip = pose.hip;
   }
   session.lastSeen = time;
   result.landmarks = pose.landmarks;
@@ -296,7 +343,7 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
       result.message = 'Getting ready…';
       if (session.controls.ready) {
         session.track.anchorWidth = session.controls.width;
-        session.track.anchorTorso = pose.torso;
+        session.track.anchorHipWidth = pose.hipWidth;
         session.samples = [];
       }
     }

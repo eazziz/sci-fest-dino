@@ -37,13 +37,18 @@ outside the central play area. No hands-up gesture is required.
 
 - Detect up to three poses; choose a centered player, with a preference for larger
   apparent body scale. If two candidates are too similar, ask for one player in the middle.
-- Match the selected player across frames by torso position and body scale, not
-  the order of the detector's output. Ignore other candidates while tracking them.
+- Match the selected player across frames by shoulder and hip position plus body
+  scale, not the order of the detector's output. Ignore other candidates while tracking them.
+- Ducking-tolerant, passer-by-strict: once calibrated, the player may look bigger
+  (bending/leaning toward the camera) but not smaller, since anyone behind them is
+  farther away. Hip width is used instead of torso length, which shrinks when bending.
 - Require stable horizontal position, shoulder height, hip height, and shoulder
   width before calibration. Visible bent knees, raised hands, and leaning delay it.
 - Freeze calibration during a round, including while jumping and ducking.
-- Pause the round when tracking is missing or ambiguous. Brief loss preserves
-  the round, but a neutral pose is required before triggering another jump.
+- If the player briefly vanishes from detection mid-round, hold their last state
+  (e.g. still ducking) for up to 0.5 s; nobody else gets control during the hold.
+  Then pause. No hold when two people overlap or the player visibly walks out.
+  After a loss, a neutral pose is required before triggering another jump.
 - A frozen camera or suspended tab cannot complete calibration using stale frames.
 
 This uses pose geometry, not face recognition or persistent identity. Overlapping

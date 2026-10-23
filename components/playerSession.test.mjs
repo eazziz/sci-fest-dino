@@ -122,7 +122,12 @@ test('hips required for acquisition, feet optional, low-confidence shoulders rej
   p[27].visibility = p[28].visibility = 0;
   assert.equal(h.settle(p).phase, 'ready');
   p[11].visibility = 0.2;
-  assert.equal(h.tick([p], true).tracked, false);
+  const r = h.tick([p], true);
+  assert.equal(r.landmarks, null); // rejected pose never drives the game
+  assert.equal(r.jump, false);
+  let last;
+  for (let i = 0; i < 13; i++) last = h.tick([p], true); // past the grace hold
+  assert.equal(last.tracked, false);
 });
 
 test('no clipped-head calibration or malformed pose', () => {
@@ -150,7 +155,12 @@ test('brief loss retains calibration but requires neutral before another jump', 
   const h = harness();
   h.settle();
   h.tick([person()], true);
-  for (let i = 0; i < 10; i++) assert.equal(h.tick([], true).tracked, false);
+  for (let i = 0; i < 15; i++) {
+    const r = h.tick([], true);
+    assert.equal(r.jump, false);
+    assert.equal(r.landmarks, null);
+    if (i >= 13) assert.equal(r.tracked, false); // > 500 ms grace: round pauses
+  }
   assert.equal(h.session.controls.ready, true);
   assert.equal(h.tick([person({ y: 0.28 })], true).jump, false);
   h.tick([person()], true);
@@ -176,7 +186,9 @@ test('a visible spectator cannot keep the departing player session alive', () =>
   let departed = false;
   for (let i = 0; i < 46; i++) {
     const r = h.tick([person({ x: 0.8 })], true);
-    assert.equal(r.tracked, false);
+    assert.equal(r.landmarks, null); // the spectator never gets control
+    assert.equal(r.jump, false);
+    if (i >= 13) assert.equal(r.tracked, false);
     departed ||= r.departed;
   }
   assert.equal(departed, true);
@@ -284,4 +296,83 @@ test('diagnostics distinguish the smaller calibration entry area from the tracki
   assert.equal(r.debug.checks.find(c => c.id === 'center').status, 'fail');
   assert.equal(r.debug.checks.find(c => c.id === 'trackingArea').status, 'pass');
   assert.equal(r.debug.lastReset.reason, 'Inside entry area');
+});
+
+// Bending forward to duck: hips stay put, shoulders drop toward them (torso looks
+// shorter) and come toward the camera (shoulders look wider).
+function bend(torsoK, grow = 1) {
+  const p = person();
+  const width = 0.2 * grow;
+  const y = 0.35 + 0.2 * 1.3 * (1 - torsoK);
+  p[11] = { x: 0.5 - width / aspect / 2, y, visibility: 0.99 };
+  p[12] = { x: 0.5 + width / aspect / 2, y, visibility: 0.99 };
+  p[15] = { ...p[11], y: y + width };
+  p[16] = { ...p[12], y: y + width };
+  return p;
+}
+
+test('deep forward duck keeps the player tracked and ducking', () => {
+  const h = harness();
+  h.settle();
+  h.tick([person()], true);
+  for (const [k, grow] of [[0.85, 1.05], [0.7, 1.1], [0.55, 1.2], [0.4, 1.3], [0.3, 1.35]]) {
+    const r = h.tick([bend(k, grow)], true);
+    assert.equal(r.tracked, true, 'lost at torso ' + k);
+  }
+  for (let i = 0; i < 30; i++) {
+    const r = h.tick([bend(0.3, 1.35)], true);
+    assert.equal(r.tracked, true);
+    assert.equal(r.duck, true);
+  }
+  assert.equal(h.tick([person()], true).tracked, true);
+});
+
+test('a smaller person behind the player is never adopted, even while the player is hidden', () => {
+  const h = harness();
+  h.settle();
+  h.tick([person()], true);
+  // Farther from the camera = smaller, standing right where the player was.
+  const behind = person({ width: 0.15, y: 0.3 });
+  let departed = false;
+  // Until the old session ends (then they may legitimately start a new one).
+  for (let i = 0; i < 50 && !departed; i++) {
+    const r = h.tick([behind], true);
+    assert.notEqual(r.landmarks, behind);
+    assert.equal(r.jump, false);
+    if (i >= 13) assert.equal(r.tracked, false);
+    departed ||= r.departed;
+  }
+  assert.equal(departed, true);
+});
+
+test('player keeps control while a smaller person walks behind them', () => {
+  const h = harness();
+  h.settle();
+  const player = person();
+  for (const x of [0.3, 0.4, 0.5, 0.55, 0.6, 0.7]) {
+    const r = h.tick([person({ x, width: 0.14, y: 0.3 }), player], true);
+    assert.equal(r.landmarks, player);
+  }
+});
+
+test('grace hold keeps a duck through a brief detection dropout, then pauses', () => {
+  const h = harness();
+  h.settle();
+  h.tick([person()], true);
+  for (let i = 0; i < 5; i++) h.tick([bend(0.4, 1.3)], true);
+  for (let i = 0; i < 8; i++) { // 320 ms of no detections
+    const r = h.tick([], true);
+    assert.equal(r.tracked, true);
+    assert.equal(r.duck, true);
+    assert.equal(r.landmarks, null);
+  }
+  assert.equal(h.tick([bend(0.4, 1.3)], true).tracked, true);
+  for (let i = 0; i < 14; i++) h.tick([], true);
+  assert.equal(h.tick([], true).tracked, false);
+});
+
+test('no grace hold before the round starts', () => {
+  const h = harness();
+  h.settle();
+  assert.equal(h.tick([], false).tracked, false);
 });
