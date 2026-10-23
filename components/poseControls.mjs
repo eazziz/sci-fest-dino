@@ -3,9 +3,20 @@
 // neither ducks nor disarms the jump.
 export const ZONES = { jump: -0.25, duck: 0.45, neutralTop: -0.10, neutralBottom: 0.20 };
 
+// Fast jump trigger: fire on the upward PUSH-OFF instead of waiting for the shoulders
+// to clear the jump line, which only happens around take-off. Units are calibrated
+// shoulder widths, so kids and adults use the same numbers. The line above stays as
+// a fallback for slow or gentle jumpers; whichever fires first wins.
+export const RISE = {
+  windowMs: 150,   // look back this far for the lowest recent shoulder position
+  minRise: 0.12,   // must have risen at least this far from that low point...
+  minSpeed: 2.0,   // ...at least this fast (widths/s). Jitter and slow stand-ups are below.
+  cooldownMs: 700  // ignore the landing bounce after a rise-triggered jump
+};
+
 export function createControls() {
   return { ready: false, samples: [], baseline: 0, width: 0, offset: 0,
-    pose: 'stand', armed: false, lastSeen: null,
+    pose: 'stand', armed: false, lastSeen: null, history: [], riseSpeed: 0, lastRiseJump: -Infinity,
     calibrationDebug: { range: 0, limit: 0, reset: false, sampleCount: 0, elapsedMs: 0 } };
 }
 
@@ -13,7 +24,20 @@ export function loseTracking(s) {
   s.pose = 'stand';
   s.armed = false;
   s.lastSeen = null;
+  s.history = [];
+  s.riseSpeed = 0;
   if (!s.ready) s.samples = [];
+}
+
+// Upward speed from the lowest point in the recent window (handles the dip-then-push).
+function measureRise(s, time) {
+  s.history.push({ offset: s.offset, time });
+  while (s.history.length && time - s.history[0].time > RISE.windowMs) s.history.shift();
+  const low = s.history.reduce((a, b) => (b.offset > a.offset ? b : a), s.history[0]);
+  const rise = low.offset - s.offset; // positive = shoulders moved up
+  const dt = (time - low.time) / 1000;
+  s.riseSpeed = dt > 0 ? rise / dt : 0;
+  return rise >= RISE.minRise && s.riseSpeed >= RISE.minSpeed;
 }
 
 export function updateControls(s, y, width, time, calibrationMs = 1000) {
@@ -47,6 +71,16 @@ export function updateControls(s, y, width, time, calibrationMs = 1000) {
   }
   // Freeze the calibrated scale: turning/crouching must not move the lines.
   s.offset = (y - s.baseline) / s.width;
+  const rising = measureRise(s, time);
+  // Never from a duck: standing back up is also fast upward motion, and a duck
+  // already disarms. Fires during the push, even while still below standing height.
+  if (rising && s.armed && s.pose !== 'duck' && s.offset < ZONES.duck
+      && time - s.lastRiseJump >= RISE.cooldownMs) {
+    s.pose = 'jump';
+    s.armed = false;
+    s.lastRiseJump = time;
+    return true;
+  }
   const neutral = s.offset >= ZONES.neutralTop && s.offset <= ZONES.neutralBottom;
   if (neutral) {
     s.pose = 'stand';
@@ -55,7 +89,8 @@ export function updateControls(s, y, width, time, calibrationMs = 1000) {
     s.pose = 'duck';
     s.armed = false;
   } else if (s.offset <= ZONES.jump) {
-    const fire = s.armed;
+    // Same physical jump that already fired early on the push-off: don't fire again.
+    const fire = s.armed && time - s.lastRiseJump >= RISE.cooldownMs;
     s.pose = 'jump';
     s.armed = false;
     return fire;

@@ -45,6 +45,9 @@ outside the central play area. No hands-up gesture is required.
 - Require stable horizontal position, shoulder height, hip height, and shoulder
   width before calibration. Visible bent knees, raised hands, and leaning delay it.
 - Freeze calibration during a round, including while jumping and ducking.
+- Jumps fire on a fast upward shoulder push (`RISE` in `poseControls.mjs`), usually
+  ~150 ms before the shoulders clear the jump line; the line remains a fallback for
+  slow jumpers. Rising out of a duck never counts, and the landing bounce is ignored.
 - If the player briefly vanishes from detection mid-round, hold their last state
   (e.g. still ducking) for up to 0.5 s; nobody else gets control during the hold.
   Then pause. No hold when two people overlap or the player visibly walks out.

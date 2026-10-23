@@ -176,7 +176,8 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
     debug: { time, detected: poses.length, focusedIndex: null, gapMs: null,
       checks: [], candidates: [], sampleCount: 0, elapsedMs: 0, lastReset: session.lastReset,
       baseline: session.controls.baseline, width: session.controls.width, offset: session.controls.offset,
-      armed: session.controls.armed, calibrated: session.controls.ready } };
+      armed: session.controls.armed, calibrated: session.controls.ready,
+      riseSpeed: session.controls.riseSpeed } };
   const finish = () => {
     result.debug.lastReset = session.lastReset;
     result.debug.calibrated = session.controls.ready;
@@ -184,6 +185,7 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
     result.debug.width = session.controls.width;
     result.debug.offset = session.controls.offset;
     result.debug.armed = session.controls.armed;
+    result.debug.riseSpeed = session.controls.riseSpeed;
     if (session.controls.ready) {
       result.debug.sampleCount = session.controls.calibrationDebug.sampleCount;
       result.debug.elapsedMs = session.controls.calibrationDebug.elapsedMs;

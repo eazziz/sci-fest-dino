@@ -1,5 +1,6 @@
 import React from 'react';
 import { updatePlayerSession } from './playerSession.mjs';
+import { RISE } from './poseControls.mjs';
 
 export interface DebugSnapshot {
     session: ReturnType<typeof updatePlayerSession>['debug'];
@@ -63,7 +64,8 @@ export default function CalibrationDebug({ snapshot, phase, cameraReady }: {
                     Values use camera coordinates; X=0.5 is the center. Scroll for all checks.</p>
                 <CheckTable checks={debug.checks} />
                 <p className="debug-note">Baseline Y: {value(debug.baseline)} · Shoulder scale: {value(debug.width)}
-                    {' '}· Movement offset: {value(debug.offset)}</p>
+                    {' '}· Movement offset: {value(debug.offset)}
+                    {' '}· Rise speed: {value(debug.riseSpeed)} widths/s (jump at ≥ {RISE.minSpeed.toFixed(1)})</p>
                 <details>
                     <summary>Inspect all detected poses ({debug.candidates.length})</summary>
                     {debug.candidates.map(candidate => <section key={candidate.index}>
