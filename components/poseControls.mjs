@@ -3,14 +3,17 @@
 // neither ducks nor disarms the jump.
 export const ZONES = { jump: -0.25, duck: 0.45, neutralTop: -0.10, neutralBottom: 0.20 };
 
-// Fast jump trigger: fire on the upward PUSH-OFF instead of waiting for the shoulders
-// to clear the jump line, which only happens around take-off. Units are calibrated
-// shoulder widths, so kids and adults use the same numbers. The line above stays as
-// a fallback for slow or gentle jumpers; whichever fires first wins.
+// Fast jump trigger: fire as the shoulders pass standing height while still moving up
+// fast, instead of waiting for them to clear the jump line. Standing up out of a squat
+// also rises fast, but it SLOWS TO A STOP by standing height; a jump is at its fastest
+// there (take-off). So the speed is measured only over the most recent moment, and only
+// once the shoulders are back at (or above) standing height. Units are calibrated
+// shoulder widths, so kids and adults use the same numbers. The line above stays as a
+// fallback for slow or gentle jumpers; whichever fires first wins.
 export const RISE = {
-  windowMs: 150,   // look back this far for the lowest recent shoulder position
-  minRise: 0.12,   // must have risen at least this far from that low point...
-  minSpeed: 2.0,   // ...at least this fast (widths/s). Jitter and slow stand-ups are below.
+  maxOffset: 0.0,  // only at/above standing height (0 = calibrated standing; + = lower)
+  speedMs: 100,    // measure speed over this recent stretch only (no stale push speed)
+  minSpeed: 2.0,   // widths/s still rising at standing height. Stand-ups have slowed below this.
   cooldownMs: 700  // ignore the landing bounce after a rise-triggered jump
 };
 
@@ -29,15 +32,15 @@ export function loseTracking(s) {
   if (!s.ready) s.samples = [];
 }
 
-// Upward speed from the lowest point in the recent window (handles the dip-then-push).
+// Current upward speed: from the oldest sample within the last `speedMs` (at least one
+// frame back, so it still works at low frame rates). Positive = shoulders moving up.
 function measureRise(s, time) {
   s.history.push({ offset: s.offset, time });
-  while (s.history.length && time - s.history[0].time > RISE.windowMs) s.history.shift();
-  const low = s.history.reduce((a, b) => (b.offset > a.offset ? b : a), s.history[0]);
-  const rise = low.offset - s.offset; // positive = shoulders moved up
-  const dt = (time - low.time) / 1000;
-  s.riseSpeed = dt > 0 ? rise / dt : 0;
-  return rise >= RISE.minRise && s.riseSpeed >= RISE.minSpeed;
+  while (s.history.length > 2 && time - s.history[1].time >= RISE.speedMs) s.history.shift();
+  const ref = s.history[0];
+  const dt = (time - ref.time) / 1000;
+  s.riseSpeed = dt > 0 ? (ref.offset - s.offset) / dt : 0;
+  return s.offset <= RISE.maxOffset && s.riseSpeed >= RISE.minSpeed;
 }
 
 export function updateControls(s, y, width, time, calibrationMs = 1000) {
