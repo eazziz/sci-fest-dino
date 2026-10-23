@@ -12,8 +12,12 @@ export function createPlayerSession() {
   };
 }
 
+// @mediapipe/tasks-vision 0.10.8 returns only x/y/z (no `visibility`). When the
+// field is absent, fall back to the in-frame check alone; when present, honor it.
+const hasConfidence = p => Number.isFinite(p?.visibility);
 const visible = p => p && Number.isFinite(p.x) && Number.isFinite(p.y)
-  && (p.visibility ?? 0) >= 0.6 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+  && (!hasConfidence(p) || p.visibility >= 0.6)
+  && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
 const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const distance = (a, b, aspect) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 const inArea = (x, expanded = false) => x >= (expanded ? PLAY_AREA.exitLeft : PLAY_AREA.left)
@@ -43,12 +47,15 @@ export function inspectPose(landmarks, aspect = 1) {
   const [left, right] = [landmarks?.[11], landmarks?.[12]];
   const shouldersVisible = [left, right].every(visible);
   const hipsVisible = [landmarks?.[23], landmarks?.[24]].every(visible);
-  const confidence = indices => indices.map(i => number(landmarks?.[i]?.visibility)).join(' / ');
+  const confidence = indices => indices.map(i => hasConfidence(landmarks?.[i])
+    ? number(landmarks[i].visibility) : 'n/a').join(' / ');
+  const need = indices => indices.some(i => hasConfidence(landmarks?.[i]))
+    ? 'need ≥ 0.600 and inside frame' : 'model gives no confidence; inside frame only';
   const checks = [
     check('shoulders', 'Both shoulders visible', shouldersVisible,
-      'Confidence L/R: ' + confidence([11, 12]) + '; need ≥ 0.600 and inside frame'),
+      'Confidence L/R: ' + confidence([11, 12]) + '; ' + need([11, 12])),
     check('hips', 'Both hips visible', hipsVisible,
-      'Confidence L/R: ' + confidence([23, 24]) + '; need ≥ 0.600 and inside frame')
+      'Confidence L/R: ' + confidence([23, 24]) + '; ' + need([23, 24]))
   ];
   if (!shouldersVisible || !Number.isFinite(aspect) || aspect <= 0) {
     for (const [id, label] of [['width', 'Shoulder size'], ['torso', 'Torso upright'],
