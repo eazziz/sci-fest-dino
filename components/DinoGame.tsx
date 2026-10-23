@@ -564,7 +564,8 @@ const DinoGame: React.FC = () => {
             }
 
             const r = Math.random();
-            let count = r > 0.8 ? 3 : (r > 0.5 ? 2 : 1);
+            // At most two cacti per group: three in a row was too wide to clear.
+            const count = r > 0.5 ? 2 : 1;
 
             let nextX = GAME_CONFIG.CANVAS_WIDTH; 
 

@@ -30,7 +30,7 @@ test('jump once, require neutral before another jump', () => {
 });
 test('duck release hysteresis and direct duck-to-high rejection', () => {
   const {s, move} = calibrated();
-  move(0.4);
+  move(0.5);
   move(0.3);
   assert.equal(s.pose, 'duck');
   assert.equal(move(-0.4), false);
@@ -40,11 +40,19 @@ test('duck release hysteresis and direct duck-to-high rejection', () => {
 test('same normalized movements for different heights and scales', () => {
   for (const y of [0.25, 0.6]) for (const width of [0.08, 0.3]) {
     const {s, move} = calibrated(y, width);
-    move(0.4);
+    move(0.5);
     assert.equal(s.pose, 'duck');
     move(0);
     assert.equal(move(-0.3), true);
   }
+});
+test('squatting down to wind up for a jump neither ducks nor blocks the jump', () => {
+  const {s, move} = calibrated();
+  for (const dip of [0.3, 0.38, 0.42, 0.38]) {
+    assert.equal(move(dip), false);
+    assert.notEqual(s.pose, 'duck');
+  }
+  assert.equal(move(-0.3), true); // straight from the squat into the jump
 });
 test('tracking loss releases duck and requires neutral to rearm', () => {
   const {s, move} = calibrated();
