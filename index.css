@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('/fonts/press-start-2p.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: 'Press Start 2P', cursive;
+  background-color: #f7f7f7;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; }
+body { overflow: hidden; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
+.tv-app, .tv-layout { width: 100%; height: 100vh; height: 100dvh; }
+.tv-layout { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.game-panel { min-height: 0; display: flex; flex-direction: column; background: #fff; color: #535353; }
+.game-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: clamp(12px, 2.2vmin, 32px); }
+.game-header h1 { margin: 0; font-size: clamp(14px, 2.6vmin, 32px); white-space: nowrap; }
+.display-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.display-controls button { border: 1px solid #d4d4d4; padding: 10px; border-radius: 6px; font-size: clamp(8px, .9vmin, 12px); background: #fafafa; }
+.display-controls button:hover { background: #ededed; }
+.display-message { text-align: center; font: 14px system-ui, sans-serif; }
+.game-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.game-canvas { position: absolute; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.game-instructions { margin: 0; padding: clamp(10px, 2.2vmin, 28px); text-align: center; font-size: clamp(8px, 1.2vmin, 16px); line-height: 1.8; }
+.camera-panel { position: relative; min-height: 0; overflow: hidden; background: #101719; border-top: 4px solid #f59e0b; color: white; }
+.camera-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+.camera-overlay { pointer-events: none; }
+.camera-heading, .camera-footer { position: absolute; left: 0; right: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: clamp(12px, 2.2vmin, 32px); }
+.camera-heading { top: 0; align-items: flex-start; background: linear-gradient(#000c, transparent); padding-bottom: 40px; pointer-events: none; }
+.camera-label { font-size: clamp(8px, 1.1vmin, 15px); white-space: nowrap; line-height: 1.8; color: #fbbf24; }
+.pose-status { margin: 0; text-align: right; font-size: clamp(9px, 1.3vmin, 18px); max-width: 70%; line-height: 1.8; text-shadow: 0 1px 4px black; }
+.camera-footer { bottom: 0; background: linear-gradient(transparent, #000d); padding-top: 40px; }
+.pose-signals { display: flex; gap: clamp(10px, 2vmin, 24px); font-size: clamp(8px, 1vmin, 14px); }
+.pose-signals > span { display: flex; align-items: center; gap: 8px; }
+.pose-light { display: inline-block; width: clamp(12px, 1.5vmin, 22px); height: clamp(12px, 1.5vmin, 22px); border-radius: 50%; background: #666; transition: background .1s, box-shadow .1s; }
+.jump-light.active { background: #ff5252; box-shadow: 0 0 16px #ff5252; }
+.duck-light.active { background: #f59e0b; box-shadow: 0 0 16px #f59e0b; }
+.recalibrate-button { border: 1px solid #ffffff80; border-radius: 6px; background: #101719cc; padding: 14px 12px; color: white; font-size: clamp(8px, 1vmin, 14px); line-height: 1.6; }
+.recalibrate-button:hover:enabled { background: #354246; }
+.camera-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 70px 20px; text-align: center; }
+.camera-placeholder p { font-size: clamp(12px, 2vmin, 26px); }
+.camera-placeholder > span:last-child { font: clamp(14px, 1.8vmin, 22px)/1.5 system-ui, sans-serif; color: #a7b4b8; }
+.camera-symbol { color: #fbbf24; font: clamp(40px, 8vmin, 110px)/1 system-ui, sans-serif; }
+@media (max-width: 480px) {
+  .game-header { gap: 8px; }
+  .display-controls { gap: 4px; }
+  .display-controls button { padding: 8px 6px; font-size: 7px; }
+  .camera-footer { gap: 8px; }
+  .recalibrate-button { max-width: 55%; padding: 10px 8px; }
+}
