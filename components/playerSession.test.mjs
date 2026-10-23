@@ -203,3 +203,75 @@ test('between rounds automatically remeasure standing position, never the death 
   assert.equal(h.settle(person({ y: 0.38 })).phase, 'ready');
   assert.ok(Math.abs(h.session.controls.baseline - 0.38) < 0.0001);
 });
+
+test('diagnostics expose missing hips and optional legs without changing the gates', () => {
+  const h = harness();
+  let r = h.tick([person({ hips: false })]);
+  assert.equal(r.debug.checks.find(c => c.id === 'hips').status, 'fail');
+  assert.equal(r.debug.checks.find(c => c.id === 'selection').status, 'fail');
+  assert.equal(r.debug.checks.find(c => c.id === 'duration').status, 'wait');
+  const p = person();
+  p[27].visibility = p[28].visibility = 0;
+  r = h.tick([p]);
+  assert.equal(r.debug.checks.find(c => c.id === 'LeftLeg').status, 'skip');
+  assert.equal(r.debug.checks.find(c => c.id === 'RightLeg').status, 'skip');
+  assert.equal(h.settle(p).phase, 'ready');
+});
+
+test('diagnostics name the posture check that resets calibration', () => {
+  const h = harness();
+  const p = person();
+  p[15].y = 0.2;
+  const r = h.tick([p]);
+  assert.equal(r.debug.checks.find(c => c.id === 'arms').status, 'fail');
+  assert.equal(r.debug.lastReset.reason, 'Arms lowered');
+  assert.equal(r.debug.sampleCount, 0);
+});
+
+test('diagnostics report real slow update intervals and preserve reset history', () => {
+  const h = harness();
+  for (let i = 0; i < 10; i++) h.tick([person()]);
+  let r = h.tick([person()], false, 450);
+  assert.equal(r.debug.gapMs, 450);
+  assert.equal(r.debug.checks.find(c => c.id === 'frameGap').status, 'fail');
+  assert.match(r.debug.lastReset.reason, /Update gap exceeded 300 ms/);
+  assert.equal(r.debug.sampleCount, 1);
+  r = h.tick([person()]);
+  assert.equal(r.debug.checks.find(c => c.id === 'frameGap').status, 'pass');
+  assert.match(r.debug.lastReset.reason, /Update gap exceeded/);
+});
+
+test('diagnostics retain the shoulder motion that caused a sample reset', () => {
+  const h = harness();
+  for (let i = 0; i < 8; i++) h.tick([person()]);
+  const p = person();
+  p[11].y += 0.04;
+  p[12].y += 0.04;
+  const r = h.tick([p]);
+  assert.equal(r.debug.checks.find(c => c.id === 'stableShoulders').status, 'fail');
+  assert.equal(r.debug.lastReset.reason, 'Stable shoulder height');
+  assert.equal(r.debug.sampleCount, 1);
+});
+
+test('diagnostics report each pose and the actual completed sample count', () => {
+  const h = harness();
+  let r;
+  for (let i = 0; i < 27; i++) r = h.tick([person({ x: .85 }), person()]);
+  assert.equal(r.debug.detected, 2);
+  assert.equal(r.debug.focusedIndex, 1);
+  assert.equal(r.debug.candidates.length, 2);
+  assert.equal(r.debug.candidates[0].checks.find(c => c.id === 'center').status, 'fail');
+  assert.equal(r.debug.calibrated, true);
+  assert.equal(r.debug.sampleCount, 26);
+  assert.equal(r.debug.elapsedMs, 1000);
+});
+
+test('diagnostics distinguish the smaller calibration entry area from the tracking area', () => {
+  const h = harness();
+  h.tick([person({ x: .69 })]);
+  const r = h.tick([person({ x: .74 })]);
+  assert.equal(r.tracked, true);
+  assert.equal(r.debug.checks.find(c => c.id === 'center').status, 'fail');
+  assert.equal(r.debug.checks.find(c => c.id === 'trackingArea').status, 'pass');
+  assert.equal(r.debug.lastReset.reason, 'Inside entry area');
+});

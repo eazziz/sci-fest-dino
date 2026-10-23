@@ -3,7 +3,8 @@ export const ZONES = { jump: -0.25, duck: 0.35, neutralTop: -0.10, neutralBottom
 
 export function createControls() {
   return { ready: false, samples: [], baseline: 0, width: 0, offset: 0,
-    pose: 'stand', armed: false, lastSeen: null };
+    pose: 'stand', armed: false, lastSeen: null,
+    calibrationDebug: { range: 0, limit: 0, reset: false, sampleCount: 0, elapsedMs: 0 } };
 }
 
 export function loseTracking(s) {
@@ -24,8 +25,12 @@ export function updateControls(s, y, width, time, calibrationMs = 1000) {
     s.samples.push({ y, width, time });
     const ys = s.samples.map(p => p.y);
     const meanWidth = s.samples.reduce((n, p) => n + p.width, 0) / s.samples.length;
+    s.calibrationDebug = { range: Math.max(...ys) - Math.min(...ys),
+      limit: meanWidth * 0.12, reset: false, sampleCount: s.samples.length,
+      elapsedMs: time - s.samples[0].time };
     // Require a roughly stationary standing pose for one second.
     if (Math.max(...ys) - Math.min(...ys) > meanWidth * 0.12) {
+      s.calibrationDebug.reset = true;
       s.samples = [{ y, width, time }];
       return false;
     }

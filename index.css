@@ -64,6 +64,25 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .tracking-pause { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #fffd; text-align: center; padding: 24px; z-index: 10; }
 .tracking-pause p { font-size: clamp(12px, 2vmin, 24px); line-height: 1.8; margin: 0; }
 .tracking-pause span { font: clamp(16px, 2vmin, 24px)/1.5 system-ui, sans-serif; }
+.calibration-debug { position: absolute; inset: 8px 8px auto; z-index: 30; max-height: calc(100% - 16px); overflow: auto; padding: clamp(10px, 1.6vmin, 18px); border: 1px solid #819294; border-radius: 8px; color: #e8f0f0; background: #101c20f5; font: clamp(11px, 1.35vmin, 16px)/1.45 ui-monospace, monospace; }
+.calibration-debug h2 { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font: inherit; font-weight: bold; margin: 0 0 8px; color: #fbbf24; }
+.calibration-debug h2 span { color: #a9c6c9; }
+.calibration-debug h3 { font: inherit; font-weight: bold; margin: 16px 0 6px; }
+.debug-blocker { margin: 0 0 10px; padding: 8px; border-left: 3px solid #fbbf24; background: #ffffff0c; overflow-wrap: anywhere; }
+.debug-metrics { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.debug-reset { margin: 10px 0; color: #ffcf8d; }
+.debug-note { margin: 8px 0; color: #a9bec2; }
+.debug-checks { width: 100%; table-layout: fixed; border-collapse: collapse; font: inherit; text-align: left; }
+.debug-checks th, .debug-checks td { padding: 5px 6px; border-bottom: 1px solid #ffffff20; overflow-wrap: anywhere; vertical-align: top; }
+.debug-checks th { color: #a9bec2; font-weight: normal; }
+.debug-checks th:first-child { width: 34%; }
+.debug-checks th:nth-child(2) { width: 16%; }
+.debug-fail { color: #ff8e8e; font-weight: bold; }
+.debug-pass { color: #70e3ac; }
+.debug-skip, .debug-wait { color: #c0cacf; }
+.calibration-debug summary { cursor: pointer; padding: 8px 0; color: #fbbf24; }
+.calibration-debug::-webkit-scrollbar { width: 8px; }
+.calibration-debug::-webkit-scrollbar-thumb { border-radius: 8px; background: #718689; }
 @media (max-width: 480px) {
   .game-header { gap: 8px; }
   .display-controls { gap: 4px; }
