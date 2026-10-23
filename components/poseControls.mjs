@@ -13,7 +13,7 @@ export function loseTracking(s) {
   if (!s.ready) s.samples = [];
 }
 
-export function updateControls(s, y, width, time) {
+export function updateControls(s, y, width, time, calibrationMs = 1000) {
   if (![y, width, time].every(Number.isFinite) || width < 0.02) {
     loseTracking(s);
     return false;
@@ -29,7 +29,7 @@ export function updateControls(s, y, width, time) {
       s.samples = [{ y, width, time }];
       return false;
     }
-    if (time - s.samples[0].time >= 1000 && s.samples.length >= 15) {
+    if (time - s.samples[0].time >= calibrationMs && s.samples.length >= 15) {
       s.baseline = ys.reduce((a, b) => a + b, 0) / ys.length;
       s.width = meanWidth;
       s.ready = true;
@@ -55,3 +55,4 @@ export function updateControls(s, y, width, time) {
   }
   return false;
 }
+

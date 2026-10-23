@@ -4,7 +4,8 @@
 */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { createControls, updateControls, loseTracking, ZONES } from './poseControls.mjs';
+import { ZONES } from './poseControls.mjs';
+import { createPlayerSession, updatePlayerSession, PLAY_AREA, SESSION_TIMING } from './playerSession.mjs';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 // --- TYPES & INTERFACES ---
@@ -17,8 +18,10 @@ interface VisionState {
     poseLandmarker: any;
     lastVideoTime: number;
     results: any;
-    controls: ReturnType<typeof createControls>;
+    session: ReturnType<typeof createPlayerSession>;
     lastPredictionTime: number;
+    lastFrameTime: number;
+    selectedLandmarks: any;
 }
 
 // Entity Interfaces for Pooling
@@ -49,6 +52,7 @@ interface GameEngineState {
     dino: DinoEntity;
     hasStarted: boolean;
     cameraReady: boolean;
+    playerTracked: boolean;
 }
 
 interface DinoEntity {
@@ -463,14 +467,17 @@ const DinoGame: React.FC = () => {
     
     // --- REACT STATE ---
     const [isLoading, setIsLoading] = useState(true);
-    const [status, setStatus] = useState("Stand tall, then JUMP or DUCK to control!");
+    const [status, setStatus] = useState("Step into the middle to play");
     const [calibrated, setCalibrated] = useState(false);
+    const [playerTracked, setPlayerTracked] = useState(false);
+    const [sessionPhase, setSessionPhase] = useState('waiting');
+    const [settleProgress, setSettleProgress] = useState(0);
     const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [gameRunning, setGameRunning] = useState(false);
     const [canRestart, setCanRestart] = useState(false);
-    const [modelLoaded, setModelLoaded] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
+    const [cameraStarting, setCameraStarting] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
 
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -511,7 +518,8 @@ const DinoGame: React.FC = () => {
         visionAnimationId: 0,
         dino: createDino(),
         hasStarted: false,
-        cameraReady: false
+        cameraReady: false,
+        playerTracked: false
     });
 
     // --- VISION STATE (Mutable) ---
@@ -519,8 +527,10 @@ const DinoGame: React.FC = () => {
         poseLandmarker: null,
         lastVideoTime: -1,
         results: undefined,
-        controls: createControls(),
-        lastPredictionTime: 0
+        session: createPlayerSession(),
+        lastPredictionTime: 0,
+        lastFrameTime: 0,
+        selectedLandmarks: null
     });
 
     useEffect(() => {
@@ -578,6 +588,7 @@ const DinoGame: React.FC = () => {
 
     const gameOver = () => {
         const engine = engineRef.current;
+        if (!engine.gameRunning) return;
         engine.gameRunning = false;
         engine.canRestart = false;
         
@@ -597,6 +608,13 @@ const DinoGame: React.FC = () => {
     const runGameLoop = (timestamp: number) => {
         const engine = engineRef.current;
         if (!engine.gameRunning) return;
+
+        // Preserve the round through brief occlusion; never advance unseen hazards.
+        if (!engine.playerTracked) {
+            engine.lastTime = timestamp;
+            engine.animationId = requestAnimationFrame(runGameLoop);
+            return;
+        }
 
         if (!engine.lastTime) engine.lastTime = timestamp;
         // Cap Delta Time to prevent huge jumps on frame drops (0.1s max)
@@ -689,8 +707,10 @@ const DinoGame: React.FC = () => {
         }
     };
 
-    const resetGame = () => {
+    const resetGame = (jumpOnStart = false) => {
         const engine = engineRef.current;
+        if (!engine.playerTracked || !visionRef.current.session.controls.ready) return;
+        if (restartTimerRef.current !== null) clearTimeout(restartTimerRef.current);
         
         // Deactivate all pool items
         engine.obstaclePool.forEach(p => p.active = false);
@@ -709,7 +729,8 @@ const DinoGame: React.FC = () => {
         engine.spawnTimer = 0;
         engine.groundSpawnTimer = 0;
         engine.dino.reset();
-        engine.dino.setDucking(visionRef.current.controls.pose === 'duck');
+        engine.dino.setDucking(visionRef.current.session.controls.pose === 'duck');
+        if (jumpOnStart && engine.dino.jump() && !mutedRef.current) SoundSynth.playJump();
         duckSignalRef.current?.classList.remove('active');
         engine.lastTime = 0;
         engine.gameRunning = true;
@@ -720,12 +741,12 @@ const DinoGame: React.FC = () => {
         runGameLoop(0);
     };
 
-    const manualStart = () => {
-        if (!visionRef.current.controls.ready) return;
+    const startFromJump = () => {
+        if (!visionRef.current.session.controls.ready || !engineRef.current.playerTracked) return;
         SoundSynth.init();
         setHasStarted(true);
         engineRef.current.hasStarted = true;
-        resetGame();
+        resetGame(true);
     };
 
     const handleJumpSignal = () => {
@@ -741,9 +762,9 @@ const DinoGame: React.FC = () => {
                 SoundSynth.playJump();
             }
         } else if (!engine.gameRunning && engine.canRestart) {
-            resetGame();
+            resetGame(true);
         } else if (!engine.hasStarted && engine.cameraReady) {
-            manualStart();
+            startFromJump();
         }
     };
 
@@ -787,71 +808,73 @@ const DinoGame: React.FC = () => {
         const outCtx = outCanvas.getContext('2d', { alpha: true })!;
         
         let didUpdate = false;
-        if (state.lastVideoTime !== video.currentTime) {
+        if (video.readyState >= 2 && state.lastVideoTime !== video.currentTime) {
             state.lastVideoTime = video.currentTime;
-            state.results = poseLandmarker.detectForVideo(video, now);
-            didUpdate = true;
+            try {
+                state.results = poseLandmarker.detectForVideo(video, now);
+                state.lastFrameTime = now;
+                didUpdate = true;
+            } catch (error) {
+                console.error('Pose tracking interrupted', error);
+                state.results = null;
+            }
         }
-        
-        outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
-        
-        if (state.results && state.results.landmarks && state.results.landmarks.length > 0) {
-            const landmarks = state.results.landmarks[0];
-            const leftShoulder = landmarks[11];
-            const rightShoulder = landmarks[12];
 
+        if (didUpdate || now - state.lastFrameTime > SESSION_TIMING.frameGap) {
+            const result = updatePlayerSession(
+                state.session, didUpdate ? state.results?.landmarks ?? [] : [], now,
+                video.videoWidth / video.videoHeight || 1, engine.gameRunning
+            );
+            if (result.departed) newPlayer();
+            state.selectedLandmarks = result.landmarks;
+            engine.playerTracked = result.tracked;
+            setPlayerTracked(result.tracked);
+            setCalibrated(state.session.controls.ready && result.tracked);
+            setSessionPhase(result.phase);
+            setSettleProgress(Math.round(result.progress * 20) / 20);
+            setStatus(result.message);
+            handleDuckSignal(result.duck);
+            if (result.jump) handleJumpSignal();
+        }
+
+        outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+        drawPlayArea(outCtx, state.session.phase);
+        if (state.selectedLandmarks) {
+            const leftShoulder = state.selectedLandmarks[11];
+            const rightShoulder = state.selectedLandmarks[12];
             outCtx.beginPath();
             outCtx.moveTo(leftShoulder.x * outCanvas.width, leftShoulder.y * outCanvas.height);
             outCtx.lineTo(rightShoulder.x * outCanvas.width, rightShoulder.y * outCanvas.height);
             outCtx.strokeStyle = GAME_CONFIG.COLORS.ACCENT;
             outCtx.lineWidth = 3 * outCanvas.height / 240;
             outCtx.stroke();
-
             outCtx.fillStyle = '#00FF00';
-            // Simple loop
-            const shoulders = [leftShoulder, rightShoulder];
-            for (let i = 0; i < shoulders.length; i++) {
+            for (const shoulder of [leftShoulder, rightShoulder]) {
                 outCtx.beginPath();
-                outCtx.arc(shoulders[i].x * outCanvas.width, shoulders[i].y * outCanvas.height, 5 * outCanvas.height / 240, 0, 2 * Math.PI);
+                outCtx.arc(shoulder.x * outCanvas.width, shoulder.y * outCanvas.height,
+                    5 * outCanvas.height / 240, 0, 2 * Math.PI);
                 outCtx.fill();
             }
-
-            if (didUpdate) {
-                const currentY = (leftShoulder.y + rightShoulder.y) / 2;
-                // Convert horizontal distances to the same units as vertical y.
-                const shoulderDist = Math.hypot(
-                    (leftShoulder.x - rightShoulder.x) * video.videoWidth / video.videoHeight,
-                    leftShoulder.y - rightShoulder.y
-                );
-                const controls = state.controls;
-                const wasReady = controls.ready;
-                const visible = [leftShoulder, rightShoulder].every(p =>
-                    (p.visibility ?? 1) >= 0.6 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1);
-                const fire = visible
-                    ? updateControls(controls, currentY, shoulderDist, now)
-                    : (loseTracking(controls), false);
-                if (wasReady !== controls.ready) setCalibrated(controls.ready);
-                handleDuckSignal(controls.pose === 'duck');
-                if (fire) handleJumpSignal();
-                setStatus(!visible ? "Keep both shoulders in view"
-                    : !controls.ready ? "Stand upright and still for one second"
-                    : controls.pose === 'duck' ? "DUCK — stay low for birds"
-                    : controls.pose === 'jump' ? "JUMP"
-                    : "RUN — jump over cacti, duck under birds");
-            }
-
             drawDebugOverlay(outCtx, state);
-        } else if (didUpdate) {
-            loseTracking(state.controls);
-            handleDuckSignal(false);
-            setStatus("Step into view — both shoulders visible");
         }
 
         engine.visionAnimationId = requestAnimationFrame(predictWebcam);
     };
 
+    const drawPlayArea = (ctx: CanvasRenderingContext2D, phase: string) => {
+        if (phase === 'playing') return;
+        const { width: w, height: h } = ctx.canvas;
+        ctx.save();
+        ctx.strokeStyle = phase === 'ready' ? '#00cc88' : '#fbbf24';
+        ctx.lineWidth = Math.max(2, h / 160);
+        ctx.setLineDash([h / 45, h / 60]);
+        ctx.strokeRect(PLAY_AREA.left * w, h * 0.08,
+            (PLAY_AREA.right - PLAY_AREA.left) * w, h * 0.84);
+        ctx.restore();
+    };
+
     const drawDebugOverlay = (ctx: CanvasRenderingContext2D, state: VisionState) => {
-        const c = state.controls;
+        const c = state.session.controls;
         if (!c.ready) return;
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
@@ -890,18 +913,25 @@ const DinoGame: React.FC = () => {
         engine.canRestart = false;
         engine.hasStarted = false;
         engine.dino.reset();
-        visionRef.current.controls = createControls();
+        engine.playerTracked = false;
+        visionRef.current.session = createPlayerSession();
+        visionRef.current.selectedLandmarks = null;
+        jumpSignalRef.current?.classList.remove('active');
         handleDuckSignal(false);
         setGameRunning(false);
         setCanRestart(false);
         setHasStarted(false);
         setCalibrated(false);
-        setStatus("Stand upright and still for one second");
+        setPlayerTracked(false);
+        setSessionPhase('waiting');
+        setSettleProgress(0);
+        setStatus("Step into the middle to play");
     };
 
     const enableCam = async () => {
         SoundSynth.init();
-        if (!visionRef.current.poseLandmarker) return;
+        if (!visionRef.current.poseLandmarker || cameraStarting || engineRef.current.cameraReady) return;
+        setCameraStarting(true);
 
         newPlayer();
 
@@ -917,33 +947,43 @@ const DinoGame: React.FC = () => {
                     predictWebcam();
                     setCameraReady(true);
                     engineRef.current.cameraReady = true;
-                });
+                }, { once: true });
+            } else {
+                stream.getTracks().forEach(track => track.stop());
             }
         } catch(err) {
             console.error(err);
             alert("Please enable camera access to play!");
+        } finally {
+            setCameraStarting(false);
         }
     };
 
     useEffect(() => {
+        let disposed = false;
+        let landmarker: any = null;
         const initMediaPipe = async () => {
             try {
                 const vision = await FilesetResolver.forVisionTasks(
                     "/wasm"
                 );
                 
-                visionRef.current.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+                landmarker = await PoseLandmarker.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: "/models/pose_landmarker_lite.task",
                         delegate: "GPU"
                     },
                     runningMode: "VIDEO",
-                    numPoses: 1
+                    numPoses: 3
                 });
-
+                if (disposed) {
+                    landmarker.close();
+                    return;
+                }
+                visionRef.current.poseLandmarker = landmarker;
                 setIsLoading(false);
-                setModelLoaded(true);
             } catch (err) {
+                if (disposed) return;
                 console.error(err);
                 setStatus("Failed to load AI.");
             }
@@ -952,8 +992,13 @@ const DinoGame: React.FC = () => {
         initMediaPipe();
 
         return () => {
+            disposed = true;
             cancelAnimationFrame(engineRef.current.animationId);
             cancelAnimationFrame(engineRef.current.visionAnimationId);
+            if (restartTimerRef.current !== null) clearTimeout(restartTimerRef.current);
+            const stream = videoRef.current?.srcObject as MediaStream | null;
+            stream?.getTracks().forEach(track => track.stop());
+            landmarker?.close();
         };
     }, []);
 
@@ -993,26 +1038,37 @@ const DinoGame: React.FC = () => {
                                 {!cameraReady ? (
                                     <button 
                                         onClick={enableCam} 
+                                        disabled={cameraStarting}
                                         className="px-5 py-3 bg-transparent border-2 border-[#535353] text-[#535353] font-press-start text-base cursor-pointer hover:bg-[#535353] hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#F59E0B] focus:ring-offset-2"
                                     >
-                                        ENABLE CAMERA
+                                        {cameraStarting ? "OPENING CAMERA…" : "ENABLE CAMERA"}
                                     </button>
                                 ) : (
                                     <>
-                                        <button 
-                                            onClick={manualStart}
-                                            disabled={!calibrated} 
-                                            className="px-5 py-3 bg-[#535353] border-2 border-[#535353] text-white font-press-start text-base cursor-pointer hover:bg-[#F59E0B] hover:border-[#F59E0B] transition-colors focus:outline-none focus:ring-2 focus:ring-[#F59E0B] focus:ring-offset-2"
-                                        >
-                                            {calibrated ? "START GAME" : "STAND STILL..."}
-                                        </button>
-                                        <p className="font-press-start text-xs text-[#535353] animate-pulse">
-                                            {calibrated ? "OR JUMP TO START" : "CALIBRATING SHOULDERS"}
-                                        </p>
+                                        <div className="walk-up-prompt" role="status">
+                                            <p className="walk-up-title">
+                                                {calibrated ? "READY!" : sessionPhase === 'settling'
+                                                    ? "GETTING READY…" : "STEP INTO THE MIDDLE"}
+                                            </p>
+                                            <p className="walk-up-hint">
+                                                {calibrated ? "Jump to play" : "Face the screen. We'll do the rest."}
+                                            </p>
+                                            {sessionPhase === 'settling' && (
+                                                <progress className="settle-progress" max={1} value={settleProgress}
+                                                    aria-label="Getting ready" />
+                                            )}
+                                        </div>
                                     </>
                                 )}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {gameRunning && !playerTracked && (
+                    <div className="tracking-pause" role="status">
+                        <p>WAITING FOR YOU</p>
+                        <span>Come back to the middle</span>
                     </div>
                 )}
 
@@ -1021,7 +1077,7 @@ const DinoGame: React.FC = () => {
                     <div className="absolute top-0 left-0 w-full h-full bg-black/50 flex flex-col items-center justify-center z-10 rounded-lg text-center p-2 md:p-4">
                         <div className="text-white text-xl md:text-3xl font-press-start mb-3 md:mb-6 drop-shadow-md">GAME OVER</div>
                         <div className="text-white text-xs md:text-sm font-press-start mb-2 md:mb-4 animate-pulse drop-shadow-md">
-                            {canRestart ? "JUMP TO RESTART" : "..."}
+                            {canRestart && calibrated ? "JUMP TO RESTART" : status}
                         </div>
                         <div className="text-white/90 text-[8px] font-press-start bg-black/40 p-1 md:p-2 rounded">
                             Powered By <a href="https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker" target="_blank" rel="noopener noreferrer" className="text-[#F59E0B] no-underline hover:underline focus:outline-none focus:ring-2 focus:ring-[#F59E0B] rounded-sm">MediaPipe Pose Landmarker</a>
@@ -1059,7 +1115,7 @@ const DinoGame: React.FC = () => {
                         <span><span ref={duckSignalRef} className="pose-light duck-light" />DUCK</span>
                     </div>
                     <button onClick={newPlayer} disabled={!cameraReady} className="recalibrate-button">
-                        NEW PLAYER / RECALIBRATE
+                        RESET PLAYER
                     </button>
                 </div>
           </section>
@@ -1068,3 +1124,4 @@ const DinoGame: React.FC = () => {
 };
 
 export default DinoGame;
+
