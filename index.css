@@ -37,7 +37,10 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .display-message { text-align: center; font: 14px system-ui, sans-serif; }
 .game-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 .game-canvas { position: absolute; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
-.game-instructions { margin: 0; padding: clamp(10px, 2.2vmin, 28px); text-align: center; font-size: clamp(8px, 1.2vmin, 16px); line-height: 1.8; }
+/* Big enough to read from the queue on a portrait TV; one instruction per line so the
+   wide pixel font never overflows (16 characters ≈ 16em). */
+.game-instructions { margin: 0; padding: clamp(10px, 2.2vmin, 28px); text-align: center; font-size: clamp(14px, 3.4vmin, 48px); line-height: 1.6; }
+.game-instructions span { display: block; }
 .camera-panel { position: relative; min-height: 0; overflow: hidden; background: #101719; border-top: 4px solid #f59e0b; color: white; }
 .camera-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
 .camera-overlay { pointer-events: none; }

@@ -1114,7 +1114,10 @@ const DinoGame: React.FC = () => {
                 )}
             </div>
 
-            <p className="game-instructions">JUMP OVER CACTI · DUCK UNDER BIRDS</p>
+            <p className="game-instructions">
+                <span>JUMP OVER CACTI</span>
+                <span>DUCK UNDER BIRDS</span>
+            </p>
           </section>
 
           <section className="camera-panel" aria-label="Live mirrored camera and pose tracking">
