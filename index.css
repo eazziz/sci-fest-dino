@@ -57,6 +57,13 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .camera-placeholder p { font-size: clamp(12px, 2vmin, 26px); }
 .camera-placeholder > span:last-child { font: clamp(14px, 1.8vmin, 22px)/1.5 system-ui, sans-serif; color: #a7b4b8; }
 .camera-symbol { color: #fbbf24; font: clamp(40px, 8vmin, 110px)/1 system-ui, sans-serif; }
+.walk-up-prompt { padding: 24px; text-align: center; }
+.walk-up-title { font-size: clamp(12px, 2vmin, 26px); line-height: 1.8; margin: 0 0 20px; }
+.walk-up-hint { font: clamp(16px, 2vmin, 26px)/1.5 system-ui, sans-serif; margin: 0; }
+.settle-progress { display: block; width: min(240px, 65vw); height: 8px; margin: 24px auto 0; accent-color: #00a877; }
+.tracking-pause { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #fffd; text-align: center; padding: 24px; z-index: 10; }
+.tracking-pause p { font-size: clamp(12px, 2vmin, 24px); line-height: 1.8; margin: 0; }
+.tracking-pause span { font: clamp(16px, 2vmin, 24px)/1.5 system-ui, sans-serif; }
 @media (max-width: 480px) {
   .game-header { gap: 8px; }
   .display-controls { gap: 4px; }
@@ -64,3 +71,4 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
   .camera-footer { gap: 8px; }
   .recalibrate-button { max-width: 55%; padding: 10px 8px; }
 }
+
