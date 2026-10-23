@@ -275,3 +275,50 @@ test('diagnostics distinguish the smaller calibration entry area from the tracki
   assert.equal(r.debug.checks.find(c => c.id === 'trackingArea').status, 'pass');
   assert.equal(r.debug.lastReset.reason, 'Inside entry area');
 });
+
+function withoutVisibility(p) {
+  return p.map(({ visibility, ...point }) => ({ ...point, z: 0 }));
+}
+
+test('coordinate-only PoseLandmarker output calibrates and triggers a jump', () => {
+  const h = harness();
+  const r = h.settle(withoutVisibility(person()));
+  assert.equal(r.phase, 'ready');
+  assert.equal(r.debug.checks.find(c => c.id === 'shoulders').status, 'pass');
+  assert.equal(r.debug.checks.find(c => c.id === 'hips').status, 'pass');
+  assert.match(r.debug.checks.find(c => c.id === 'shoulders').detail, /not supplied/);
+  assert.equal(h.tick([withoutVisibility(person({ y: .28 }))], true).jump, true);
+});
+
+test('coordinate fallback still rejects missing and out-of-frame shoulders', () => {
+  for (const invalid of [undefined, { x: NaN, y: .35 }, { x: -.1, y: .35 }, { x: .4, y: 1.1 }]) {
+    const h = harness();
+    const p = withoutVisibility(person());
+    p[11] = invalid;
+    const r = h.tick([p]);
+    assert.equal(r.debug.checks.find(c => c.id === 'shoulders').status, 'fail');
+    assert.equal(r.tracked, false);
+    assert.equal(h.session.controls.ready, false);
+  }
+});
+
+test('provided low or invalid confidence is rejected even with valid coordinates', () => {
+  for (const visibility of [0, .2, NaN, Infinity]) {
+    const h = harness();
+    const p = withoutVisibility(person());
+    p[11].visibility = visibility;
+    const r = h.tick([p]);
+    assert.equal(r.debug.checks.find(c => c.id === 'shoulders').status, 'fail');
+    assert.equal(r.tracked, false);
+  }
+});
+
+test('coordinate-only hips outside the frame cannot acquire a player', () => {
+  const h = harness();
+  const p = withoutVisibility(person());
+  p[23].y = 1.2;
+  const r = h.tick([p]);
+  assert.equal(r.debug.checks.find(c => c.id === 'hips').status, 'fail');
+  assert.match(r.debug.checks.find(c => c.id === 'hips').detail, /outside frame/);
+  assert.equal(r.tracked, false);
+});
