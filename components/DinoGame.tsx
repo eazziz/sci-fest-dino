@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ZONES } from './poseControls.mjs';
 import { createPlayerSession, updatePlayerSession, PLAY_AREA, SESSION_TIMING } from './playerSession.mjs';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
+import CalibrationDebug, { type DebugSnapshot } from './CalibrationDebug';
 
 // --- TYPES & INTERFACES ---
 
@@ -22,6 +23,7 @@ interface VisionState {
     lastPredictionTime: number;
     lastFrameTime: number;
     selectedLandmarks: any;
+    lastDebugTime: number;
 }
 
 // Entity Interfaces for Pooling
@@ -472,6 +474,9 @@ const DinoGame: React.FC = () => {
     const [playerTracked, setPlayerTracked] = useState(false);
     const [sessionPhase, setSessionPhase] = useState('waiting');
     const [settleProgress, setSettleProgress] = useState(0);
+    const [showDebug, setShowDebug] = useState(true);
+    const showDebugRef = useRef(true);
+    const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(null);
     const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [gameRunning, setGameRunning] = useState(false);
     const [canRestart, setCanRestart] = useState(false);
@@ -530,7 +535,8 @@ const DinoGame: React.FC = () => {
         session: createPlayerSession(),
         lastPredictionTime: 0,
         lastFrameTime: 0,
-        selectedLandmarks: null
+        selectedLandmarks: null,
+        lastDebugTime: -Infinity
     });
 
     useEffect(() => {
@@ -808,19 +814,24 @@ const DinoGame: React.FC = () => {
         const outCtx = outCanvas.getContext('2d', { alpha: true })!;
         
         let didUpdate = false;
+        let inferenceMs: number | null = null;
+        let inferenceError: string | null = null;
+        const previousFrameTime = state.lastFrameTime;
         if (video.readyState >= 2 && state.lastVideoTime !== video.currentTime) {
             state.lastVideoTime = video.currentTime;
             try {
                 state.results = poseLandmarker.detectForVideo(video, now);
+                inferenceMs = performance.now() - now;
                 state.lastFrameTime = now;
                 didUpdate = true;
             } catch (error) {
                 console.error('Pose tracking interrupted', error);
                 state.results = null;
+                inferenceError = error instanceof Error ? error.message : String(error);
             }
         }
 
-        if (didUpdate || now - state.lastFrameTime > SESSION_TIMING.frameGap) {
+        if (didUpdate || inferenceError || now - state.lastFrameTime > SESSION_TIMING.frameGap) {
             const result = updatePlayerSession(
                 state.session, didUpdate ? state.results?.landmarks ?? [] : [], now,
                 video.videoWidth / video.videoHeight || 1, engine.gameRunning
@@ -835,6 +846,12 @@ const DinoGame: React.FC = () => {
             setStatus(result.message);
             handleDuckSignal(result.duck);
             if (result.jump) handleJumpSignal();
+            if (showDebugRef.current && (now - state.lastDebugTime >= 200 || result.departed || inferenceError)) {
+                state.lastDebugTime = now;
+                setDebugSnapshot({ session: result.debug, freshFrame: didUpdate, inferenceMs,
+                    inferenceGapMs: previousFrameTime > 0 ? now - previousFrameTime : null,
+                    frameAgeMs: performance.now() - state.lastFrameTime, inferenceError });
+            }
         }
 
         outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
@@ -925,6 +942,8 @@ const DinoGame: React.FC = () => {
         setPlayerTracked(false);
         setSessionPhase('waiting');
         setSettleProgress(0);
+        setDebugSnapshot(null);
+        visionRef.current.lastDebugTime = -Infinity;
         setStatus("Step into the middle to play");
     };
 
@@ -1008,6 +1027,13 @@ const DinoGame: React.FC = () => {
             <header className="game-header">
                 <h1>DINO JUMP</h1>
                 <div className="display-controls">
+                    <button onClick={() => {
+                        showDebugRef.current = !showDebugRef.current;
+                        setShowDebug(showDebugRef.current);
+                        visionRef.current.lastDebugTime = -Infinity;
+                    }} aria-pressed={showDebug} aria-controls="calibration-debug">
+                        DEBUG {showDebug ? 'ON' : 'OFF'}
+                    </button>
                     <button onClick={() => setIsMuted(!isMuted)} aria-pressed={isMuted}>
                         {isMuted ? "SOUND OFF" : "SOUND ON"}
                     </button>
@@ -1018,6 +1044,7 @@ const DinoGame: React.FC = () => {
             </header>
             {displayMessage && <p className="display-message" role="status">{displayMessage}</p>}
             <div className="game-stage">
+                {showDebug && <CalibrationDebug snapshot={debugSnapshot} phase={sessionPhase} cameraReady={cameraReady} />}
                 <canvas 
                     ref={canvasRef} 
                     width={GAME_CONFIG.CANVAS_WIDTH} 

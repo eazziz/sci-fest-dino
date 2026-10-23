@@ -57,6 +57,24 @@ Jump/duck sensitivity is in `components/poseControls.mjs` (`ZONES`).
 
 ## Verify
 
+The **DEBUG ON / OFF** button opens a live diagnostic panel above the camera.
+It is on by default for troubleshooting. Look for red **FAIL** rows and the **Last
+reset** reason. Each row shows the measured value and the limit used by the actual
+calibration check. **WAIT** means an earlier check has not passed yet; **SKIP** is
+an optional body part that is out of view.
+
+The panel includes raw pose count, which pose is being inspected, visibility
+confidence, entry-area selection, player matching, posture checks, stability,
+fresh sample count, dwell time, inference duration, detection interval, and frame
+age. Expand **Inspect all detected poses** to inspect spectators as well. The
+display updates at most five times per second (except errors and departures).
+It also shows inference errors. If the update gap exceeds 300 ms, the failing gap
+row and last-reset reason expose the calibration reset directly. During a round,
+setup checks are informational because calibration is locked.
+
+Send a screenshot of the panel while standing in position to diagnose a blocked
+calibration. Hide it with **DEBUG ON** when visitors are playing.
+
 ```sh
 npm test
 npm run typecheck
