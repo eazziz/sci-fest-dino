@@ -31,6 +31,16 @@ function harness() {
   } };
 }
 
+test('MediaPipe 0.10.8 landmarks (x/y/z only, no visibility) still calibrate', () => {
+  const noConfidence = person().map(({ x, y }) => ({ x, y, z: 0 }));
+  const h = harness();
+  assert.equal(h.tick([noConfidence]).phase, 'settling');
+  assert.equal(h.settle(noConfidence).phase, 'ready');
+  // Hips below the frame must still be rejected without a confidence value.
+  const hipsOut = noConfidence.map((l, i) => (i === 23 || i === 24) ? { ...l, y: 1.2 } : l);
+  assert.equal(describePose(hipsOut, aspect)?.hip ?? null, null);
+});
+
 test('walk up, settle, then first jump fires without a gesture or button', () => {
   const h = harness();
   assert.equal(h.tick([]).phase, 'waiting');
