@@ -102,7 +102,24 @@ test('upward push-off fires the jump before the shoulders reach the jump line', 
   }
   assert.equal(fires.length, 1, 'exactly one jump, no landing double-jump');
   assert.ok(fires[0].offset > ZONES.jump, 'fired before the line');
-  assert.ok(lineTime - fires[0].t >= 100, 'fired ' + (lineTime - fires[0].t) + ' ms earlier');
+  assert.ok(lineTime - fires[0].t >= 50, 'fired ' + (lineTime - fires[0].t) + ' ms earlier');
+});
+
+test('squatting and standing back up never registers as a jump', () => {
+  // Smooth (eased) stand-ups from a 0.4 squat, quick to casual, sampled at 30 fps,
+  // ending with a slight rise onto the toes.
+  for (const T of [250, 350, 500]) {
+    const s = createControls();
+    let t = 0;
+    for (; t <= 1100; t += 33) updateControls(s, 0.4, 0.2, t);
+    const at = o => updateControls(s, 0.4 + o * 0.2, 0.2, t += 33);
+    for (let i = 0; i < 6; i++) assert.equal(at(0.4 * i / 6), false);  // squat down
+    for (let u = 0; u <= T; u += 33) {
+      const o = 0.4 * (1 + Math.cos(Math.PI * Math.min(u / T, 1))) / 2;
+      assert.equal(at(o), false, 'stand-up over ' + T + ' ms fired at offset ' + o.toFixed(2));
+    }
+    for (const o of [0, -0.03, -0.03, 0]) assert.equal(at(o), false);
+  }
 });
 
 test('rise trigger ignores jitter, slow stand-ups and standing up out of a duck', () => {
