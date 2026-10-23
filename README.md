@@ -33,6 +33,15 @@ there is room above the player's head to jump. Feet are optional, but visible le
 help reject crouched calibration poses. Aim the camera so waiting spectators stand
 outside the central play area. No hands-up gesture is required.
 
+## Practice round
+
+Each new player's first round starts with a short trainer: "JUMP OVER THE CACTUS!",
+then one slow, small cactus; then "DUCK UNDER THE BIRD!", then one slow bird. A miss
+shakes the screen and the same obstacle comes again instead of ending the game, and
+a bird only counts if the player ducked under it (jumping over it retries). Then
+"YOU'RE READY!" and the real game starts. Restarts after a game over skip the trainer.
+Timings and speed are in `TUTORIAL` in `components/DinoGame.tsx`.
+
 ## Tracking behavior
 
 - Detect up to three poses; choose a centered player, with a preference for larger

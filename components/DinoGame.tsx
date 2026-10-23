@@ -55,7 +55,39 @@ interface GameEngineState {
     hasStarted: boolean;
     cameraReady: boolean;
     playerTracked: boolean;
+    tutorial: TutorialState;
+    shakeTime: number;
 }
+
+// First-round trainer: one slow cactus that must be jumped, then one slow bird that
+// must be ducked. Hits shake the screen and retry instead of ending the game.
+type TutorialStep = 'jump' | 'duck' | 'go' | 'done';
+interface TutorialState {
+    step: TutorialStep;
+    timer: number;        // seconds left on the current prompt / pause
+    waiting: boolean;     // message showing, obstacle not on screen yet
+    ducked: boolean;      // ducked while the bird was over the dino
+    message: string;
+    sub: string;
+    tone: 'prompt' | 'retry' | 'success';
+}
+
+const TUTORIAL = {
+    SPEED: 280,           // vs INITIAL_SPEED 400: slower, easy to read
+    PROMPT_S: 2.5,        // prompt shown alone before the obstacle appears
+    RETRY_S: 1.6,         // pause after a miss before the obstacle comes again
+    SUCCESS_S: 1.4,
+    GO_S: 1.8,            // "here we go" before the real game
+    SHAKE_S: 0.45,
+    SHAKE_PX: 9
+};
+
+const tutorialStep = (step: TutorialStep, timer: number, message: string, sub: string,
+    tone: TutorialState['tone'] = 'prompt'): TutorialState =>
+    ({ step, timer, waiting: true, ducked: false, message, sub, tone });
+
+const JUMP_PROMPT = ['JUMP OVER THE CACTUS!', 'Jump in real life'] as const;
+const DUCK_PROMPT = ['DUCK UNDER THE BIRD!', 'Squat down low and stay low'] as const;
 
 interface DinoEntity {
     x: number;
@@ -524,7 +556,9 @@ const DinoGame: React.FC = () => {
         dino: createDino(),
         hasStarted: false,
         cameraReady: false,
-        playerTracked: false
+        playerTracked: false,
+        tutorial: tutorialStep('done', 0, '', ''),
+        shakeTime: 0
     });
 
     // --- VISION STATE (Mutable) ---
@@ -593,6 +627,110 @@ const DinoGame: React.FC = () => {
         }
     };
 
+    // --- TUTORIAL ---
+
+    const spawnTutorialObstacle = (step: TutorialStep) => {
+        const engine = engineRef.current;
+        if (step === 'jump') {
+            const cactus = getFromPool(engine.obstaclePool, () => new Cactus());
+            cactus.spawn(GAME_CONFIG.CANVAS_WIDTH);
+            cactus.width = 22;   // one small, easy cactus
+            cactus.height = 34;
+        } else {
+            getFromPool(engine.pterodactylPool, () => new Pterodactyl()).spawn(GAME_CONFIG.CANVAS_WIDTH);
+        }
+    };
+
+    const tutorialRetry = (message: string, sub: string) => {
+        const engine = engineRef.current;
+        engine.obstaclePool.forEach(p => p.active = false);
+        engine.pterodactylPool.forEach(p => p.active = false);
+        engine.tutorial = tutorialStep(engine.tutorial.step, TUTORIAL.RETRY_S, message, sub, 'retry');
+    };
+
+    const tutorialHit = () => {
+        const engine = engineRef.current;
+        engine.shakeTime = TUTORIAL.SHAKE_S;
+        if (!mutedRef.current) SoundSynth.playRoar();
+        tutorialRetry('OOPS! TRY AGAIN', engine.tutorial.step === 'jump'
+            ? 'Jump just before the cactus reaches you' : 'Duck down before the bird reaches you');
+    };
+
+    // Advances the trainer; returns nothing. Obstacles are spawned only from here.
+    const updateTutorial = (dt: number) => {
+        const engine = engineRef.current;
+        const t = engine.tutorial;
+        const dino = engine.dino;
+
+        if (t.step === 'go') {
+            t.timer -= dt;
+            if (t.timer <= 0) {
+                // Training wheels off: the real game starts from a clean slate.
+                engine.tutorial = tutorialStep('done', 0, '', '');
+                engine.score = 0;
+                engine.gameSpeed = GAME_CONFIG.INITIAL_SPEED;
+                engine.spawnTimer = 0.8;
+            }
+            return;
+        }
+
+        if (t.waiting) {
+            t.timer -= dt;
+            if (t.timer > 0) return;
+            if (t.tone === 'success') {
+                engine.tutorial = t.step === 'jump'
+                    ? tutorialStep('duck', TUTORIAL.PROMPT_S, ...DUCK_PROMPT)
+                    : tutorialStep('go', TUTORIAL.GO_S, "YOU'RE READY!", 'Here comes the real game...', 'success');
+                return;
+            }
+            const [message, sub] = t.step === 'jump' ? JUMP_PROMPT : DUCK_PROMPT;
+            engine.tutorial = { ...tutorialStep(t.step, 0, message, sub), waiting: false };
+            spawnTutorialObstacle(t.step);
+            return;
+        }
+
+        const dinoLeft = dino.x;
+        if (t.step === 'jump') {
+            const cactus = engine.obstaclePool.find(p => p.active);
+            if (!cactus || cactus.x + cactus.width < dinoLeft) {
+                engine.tutorial = tutorialStep('jump', TUTORIAL.SUCCESS_S, 'NICE JUMP!', '', 'success');
+            }
+            return;
+        }
+
+        const bird = engine.pterodactylPool.find(p => p.active);
+        if (bird && bird.x < dinoLeft + 48 && bird.x + bird.width > dinoLeft
+            && dino.ducking && dino.grounded) t.ducked = true;
+        if (!bird || bird.x + bird.width < dinoLeft) {
+            // Jumping can also clear a bird, but this lesson is about ducking.
+            if (t.ducked) engine.tutorial = tutorialStep('duck', TUTORIAL.SUCCESS_S, 'GREAT DUCK!', '', 'success');
+            else tutorialRetry("DUCK, DON'T JUMP!", 'Squat down low as the bird flies over');
+        }
+    };
+
+    const drawTutorial = (ctx: CanvasRenderingContext2D) => {
+        const t = engineRef.current.tutorial;
+        const cx = GAME_CONFIG.CANVAS_WIDTH / 2;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = t.tone === 'retry' ? GAME_CONFIG.COLORS.ACCENT
+            : t.tone === 'success' ? '#16a34a' : GAME_CONFIG.COLORS.PRIMARY;
+        ctx.font = "26px 'Press Start 2P'";
+        ctx.fillText(t.message, cx, 92);
+        if (t.sub) {
+            ctx.fillStyle = GAME_CONFIG.COLORS.PRIMARY;
+            ctx.font = "12px 'Press Start 2P'";
+            ctx.fillText(t.sub, cx, 126);
+        }
+        if (t.step === 'jump' || t.step === 'duck') {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = GAME_CONFIG.COLORS.PRIMARY;
+            ctx.font = "11px 'Press Start 2P'";
+            ctx.fillText(`PRACTICE ${t.step === 'jump' ? 1 : 2}/2`, 20, 30);
+        }
+        ctx.restore();
+    };
+
     const gameOver = () => {
         const engine = engineRef.current;
         if (!engine.gameRunning) return;
@@ -635,6 +773,17 @@ const DinoGame: React.FC = () => {
         ctx.fillStyle = GAME_CONFIG.COLORS.WHITE;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        const training = engine.tutorial.step !== 'done';
+        if (training) updateTutorial(dt);
+
+        // Screen shake (tutorial misses): offset the whole world, not the prompt text.
+        ctx.save();
+        engine.shakeTime = Math.max(0, engine.shakeTime - dt);
+        if (engine.shakeTime > 0) {
+            const k = TUTORIAL.SHAKE_PX * engine.shakeTime / TUTORIAL.SHAKE_S;
+            ctx.translate((Math.random() * 2 - 1) * k, (Math.random() * 2 - 1) * k);
+        }
+
         // Set global styles for the frame
         ctx.strokeStyle = GAME_CONFIG.COLORS.PRIMARY;
         ctx.fillStyle = GAME_CONFIG.COLORS.PRIMARY;
@@ -664,7 +813,12 @@ const DinoGame: React.FC = () => {
         engine.dino.draw(ctx);
 
         // 5. Logic & Draw Obstacles
-        spawnObstacle(dt);
+        if (!training) spawnObstacle(dt);
+        // In training a hit retries the lesson instead of ending the game.
+        const onHit = () => {
+            if (!training) gameOver();
+            else if (!engine.tutorial.waiting) tutorialHit();
+        };
         const dino = engine.dino;
         const collidesWithDino = (obs: { x: number; y: number; width: number; height: number }, padding: number) => {
             const hitbox = dino.getHitbox();
@@ -684,7 +838,7 @@ const DinoGame: React.FC = () => {
                 
                 // Collision Detection (Active obstacles only)
                 if (collidesWithDino(obs, 8)) {
-                    gameOver();
+                    onHit();
                     // Don't return, let the frame finish drawing
                 }
             }
@@ -696,25 +850,32 @@ const DinoGame: React.FC = () => {
                 pterodactyl.update(dt, engine.gameSpeed);
                 pterodactyl.draw(ctx);
                 if (collidesWithDino(pterodactyl, 3)) {
-                    gameOver();
+                    onHit();
                 }
             }
         }
+        ctx.restore(); // end screen shake
 
-        // 6. Draw Score
+        // 6. Draw Score (or the trainer's prompts)
         if (engine.gameRunning) { // Double check in case of game over mid-loop
-            engine.score += 60 * dt;
-            const scoreStr = `HI ${Math.floor(engine.score/10)}`;
-            // Font is set once ideally, but to be safe:
-            ctx.font = "16px 'Press Start 2P'";
-            ctx.textAlign = "right";
-            ctx.fillText(scoreStr, canvas.width - 20, 30);
-            
+            if (training) {
+                drawTutorial(ctx);
+            } else {
+                engine.score += 60 * dt;
+                const scoreStr = `HI ${Math.floor(engine.score/10)}`;
+                // Font is set once ideally, but to be safe:
+                ctx.fillStyle = GAME_CONFIG.COLORS.PRIMARY; // shake restore() resets it to white
+                ctx.font = "16px 'Press Start 2P'";
+                ctx.textAlign = "right";
+                ctx.fillText(scoreStr, canvas.width - 20, 30);
+            }
+
             engine.animationId = requestAnimationFrame(runGameLoop);
         }
     };
 
-    const resetGame = (jumpOnStart = false) => {
+    // `withTutorial`: a new player's first round. Restarts after game over skip it.
+    const resetGame = (jumpOnStart = false, withTutorial = false) => {
         const engine = engineRef.current;
         if (!engine.playerTracked || !visionRef.current.session.controls.ready) return;
         if (restartTimerRef.current !== null) clearTimeout(restartTimerRef.current);
@@ -732,7 +893,10 @@ const DinoGame: React.FC = () => {
 
         engine.score = 0;
         engine.canRestart = false;
-        engine.gameSpeed = GAME_CONFIG.INITIAL_SPEED;
+        engine.tutorial = withTutorial ? tutorialStep('jump', TUTORIAL.PROMPT_S, ...JUMP_PROMPT)
+            : tutorialStep('done', 0, '', '');
+        engine.shakeTime = 0;
+        engine.gameSpeed = withTutorial ? TUTORIAL.SPEED : GAME_CONFIG.INITIAL_SPEED;
         engine.spawnTimer = 0;
         engine.groundSpawnTimer = 0;
         engine.dino.reset();
@@ -753,7 +917,7 @@ const DinoGame: React.FC = () => {
         SoundSynth.init();
         setHasStarted(true);
         engineRef.current.hasStarted = true;
-        resetGame(true);
+        resetGame(true, true);
     };
 
     const handleJumpSignal = () => {
