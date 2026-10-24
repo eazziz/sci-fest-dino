@@ -13,10 +13,12 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.8",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "three": "0.180.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/three": "0.180.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
@@ -25,4 +27,3 @@
     "vite": "^6.2.0"
   }
 }
-

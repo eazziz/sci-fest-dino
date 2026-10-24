@@ -1,6 +1,6 @@
-# Science Fest Dino Jump
+# Science Fest Games
 
-Body-controlled Dino game for a portrait TV: game above, mirrored camera below.
+Body-controlled Dino Jump and Lane Runner for a portrait TV: game above, mirrored camera below.
 
 ## Run
 
@@ -9,7 +9,8 @@ npm ci
 npm run dev
 ```
 
-Open the local URL Vite prints. Click **Enable Camera** once at booth setup to
+Open the local URL Vite prints for Dino Jump. For Lane Runner, add `?game=runner`
+(e.g. `http://localhost:3000/?game=runner`). Click **Enable Camera** once at booth setup to
 grant camera access and unlock sound. Visitors do not need to touch the computer.
 Use **Full Screen** for the TV.
 
@@ -99,3 +100,50 @@ On the booth hardware, also try: an adult followed by a child; a spectator besid
 the player; a deep duck; stepping out and back; walking away after game over; and
 unplugging/reconnecting the camera. Verify that the indicated shoulder lines match
 each new player. Automated tests do not measure real-camera tracking accuracy.
+
+
+## Lane Runner
+
+Lane Runner is selected with `?game=runner`. The regular URL still opens Dino Jump.
+Both games use the same pixel font, header controls, instruction styling, 50/50
+game/camera layout, and automatic player calibration. The runner loads its 3D
+code on demand. All models, fonts, WASM and game art are local; no network connection
+is needed after installing dependencies and starting the local server.
+
+### Body controls
+
+- Enable Camera once, select the external webcam in the camera footer if needed,
+  then have the visitor stand in the middle for about one second.
+- Jump to begin a short countdown. Move left/right relative to that calibrated
+  position to select a lane. Stay there to hold it; return to the middle for center.
+- Required lateral movement scales to shoulder width. The guide lines in the
+  mirrored feed show the real lane boundaries; hysteresis avoids jitter.
+- Jump over red/white low hurdles; duck beneath blue overhead gates; move around
+  tall orange blocks. Gold coins add 25 points each; distance also earns points.
+- The first few obstacle rows introduce dodging. Later rows include jumping and
+  ducking. Every row has at least one completely clear lane with a coin trail.
+- Tracking permits sideways travel across the camera while preserving the original
+  shoulder/hip matching rules. Brief loss holds for up to 0.5 s, then pauses.
+  Leaving for 1.8 s returns to the start and clears the old calibration.
+- After a crash, stand in the middle to recalibrate; jump to retry. Debug starts
+  hidden and can be opened from the header. Reset Player is an operator fallback.
+
+### Keyboard / touch check
+
+Choose **Try with keyboard** before enabling the camera. Left/right arrows (or A/D)
+change lanes, Space/up (or W) jumps, and holding down (or S) ducks. On-screen
+buttons support touch testing. **Switch to camera** returns to body controls.
+
+The runner uses Three.js with locally constructed low-poly scenery and character
+animation. A Canvas2D compatibility renderer draws the same scene when WebGL is
+unavailable; it has simpler lighting and may be slower. Pose tracking tries GPU
+first and then CPU. Scores stay in this browser's local storage; camera frames
+are processed locally and are not uploaded.
+
+### Booth check
+
+Automated tests cover gameplay physics/collisions, scoring/restart, clear paths,
+mirroring, lane jitter, size normalization, sideways tracking, and player handoff.
+They do not replace a live webcam test. Try a child and an adult, left/right
+movement, a deep duck, a spectator walking behind, and leaving/re-entering before
+opening the booth. Keep a clear stepping area and frame shoulders, hips and headroom.

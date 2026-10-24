@@ -1,0 +1,67 @@
+/* The existing tv-layout, header, font, instructions and camera styles are shared. */
+.runner-canvas { display: block; width: 100%; height: 100%; outline: none; }
+.runner-stage { background: #9bdcf4; isolation: isolate; container-type: size; }
+.runner-score { position: absolute; top: 16px; right: 18px; display: grid; grid-template-columns: auto auto; gap: 10px 20px; color: white; text-shadow: 2px 2px 0 #263d54; font-size: clamp(10px, 1.6vmin, 22px); pointer-events: none; z-index: 1; }
+.runner-score small { grid-column: 1 / -1; text-align: right; font-size: .65em; }
+.runner-coins { color: #ffe270; }
+.runner-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: clamp(12px, 2vmin, 24px); background: #122d3a12; z-index: 3; }
+.runner-card { background: #ffffffed; color: #535353; text-align: center; padding: clamp(18px, 3vmin, 36px); border: 2px solid #ffffff; box-shadow: 0 8px 36px #183a4226; max-width: min(560px, 94%); }
+.runner-kicker { display: block; font: 700 clamp(9px, 1.15vmin, 14px)/1.6 system-ui, sans-serif; letter-spacing: .14em; margin-bottom: 14px; }
+.runner-card h2 { font: inherit; font-size: clamp(13px, 2.3vmin, 27px); line-height: 1.65; margin: 0 0 12px; }
+.runner-card p { font: clamp(15px, 1.85vmin, 23px)/1.4 system-ui, sans-serif; margin: 0 0 18px; }
+.runner-card button { display: block; margin: 12px auto 0; padding: 14px 18px; font-size: clamp(9px, 1.2vmin, 15px); line-height: 1.5; border: 2px solid #535353; color: #535353; background: transparent; }
+.runner-card button.runner-primary { color: white; background: #535353; }
+.runner-card button:hover { background: #e6e6e6; }
+.runner-card button.runner-primary:hover { background: #303030; }
+.runner-card .runner-text-button { border: 0; padding: 8px 10px; font-size: clamp(8px, .95vmin, 12px); text-decoration: underline; text-underline-offset: 4px; }
+.runner-card .runner-error { margin: 14px 0 0; color: #a53227; font-size: clamp(13px, 1.5vmin, 18px); max-width: 400px; }
+.runner-countdown { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: white; text-shadow: 4px 4px 0 #273c50; pointer-events: none; }
+.runner-countdown strong { font-size: clamp(50px, 12vmin, 150px); }
+.runner-countdown span { font-size: clamp(12px, 2vmin, 24px); }
+.runner-gameover { background: #172c5260; }
+.runner-results { display: flex; justify-content: center; gap: 35px; margin: 18px 0 24px; }
+.runner-results > span { font-size: clamp(18px, 3vmin, 34px); }
+.runner-results small { display: block; margin-top: 12px; font-size: 9px; }
+.runner-retry { display: block; font-size: clamp(9px, 1.4vmin, 17px); line-height: 1.7; color: #39735f; }
+.lane-light.active { background: #00cc88; box-shadow: 0 0 14px #00cc88; }
+.runner-camera-controls { display: flex; gap: 8px; align-items: center; }
+.runner-camera-controls select { max-width: 180px; color: white; background: #101719dd; border: 1px solid #ffffff70; border-radius: 6px; padding: 10px; font: 12px system-ui, sans-serif; }
+.runner-keyboard-panel { text-align: center; max-width: 90%; }
+.runner-keyboard-panel .runner-kicker { color: #fbbf24; }
+.runner-keyboard-panel h2 { font-size: clamp(13px, 2vmin, 28px); line-height: 1.6; }
+.runner-keyboard-panel p { font: clamp(16px, 2vmin, 25px)/1.8 system-ui, sans-serif; color: #bfd0d3; margin: 16px 0; }
+.runner-touch-controls { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+.runner-touch-controls button { padding: 14px; color: white; background: #263438; border: 1px solid #617276; border-radius: 5px; font-size: clamp(10px, 1.2vmin, 14px); touch-action: none; user-select: none; }
+.runner-touch-controls button:active { background: #467766; }
+@container (max-height: 320px) {
+ .runner-card { padding: 12px 20px; }
+ .runner-card h2 { font-size: 14px; margin: 0 0 7px; }
+ .runner-card p { font-size: 15px; margin-bottom: 8px; }
+ .runner-card .runner-kicker { display: none; }
+ .runner-card button { padding: 10px 14px; margin-top: 8px; font-size: 10px; }
+ .runner-card .runner-text-button { font-size: 8px; padding: 7px; }
+ .runner-results { margin: 10px 0; }
+ .runner-results > span { font-size: 20px; }
+}
+@media (max-width: 700px) {
+ .runner-layout .game-header { flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
+ .runner-layout .game-header h1 { font-size: clamp(14px, 3vmin, 22px); }
+ .runner-layout .display-controls { gap: 5px; }
+ .runner-layout .display-controls button { font-size: 7px; padding: 7px; }
+ .runner-layout .camera-footer { gap: 8px; flex-wrap: wrap; }
+ .runner-layout .pose-signals { font-size: 7px; gap: 12px; }
+ .runner-layout .pose-signals > span { gap: 4px; }
+ .runner-camera-controls select { max-width: 130px; }
+ .runner-camera-controls .recalibrate-button { max-width: none; }
+}
+@media (max-height: 700px) and (min-aspect-ratio: 1/1) {
+ .runner-layout .game-header { padding: 8px 16px; }
+ .runner-layout .game-instructions { padding: 7px; font-size: 13px; }
+ .runner-card { padding: 12px 20px; }
+ .runner-card h2 { font-size: 14px; margin-bottom: 7px; }
+ .runner-card p, .runner-kicker { margin-bottom: 7px; }
+ .runner-card button { padding: 9px 14px; margin-top: 6px; }
+ .runner-keyboard-panel p { margin: 5px 0; font-size: 14px; line-height: 1.45; }
+ .runner-touch-controls { margin: 8px 0; }
+ .runner-keyboard-panel h2, .runner-keyboard-panel .runner-kicker { display: none; }
+}
