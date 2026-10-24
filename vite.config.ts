@@ -6,6 +6,7 @@ export default defineConfig({
       server: {
         port: 3000,
         host: '0.0.0.0',
+        allowedHosts: ['terminal.local'],
       },
       plugins: [react()],
       resolve: {
@@ -14,3 +15,4 @@ export default defineConfig({
         }
       }
 });
+

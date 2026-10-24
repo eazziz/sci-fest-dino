@@ -14,9 +14,9 @@ export const MATCH_LIMITS = {
   hipMoveX: 0.75, hipMoveY: 1.0         // hip travel per update, in shoulder widths
 };
 
-export function createPlayerSession() {
+export function createPlayerSession(options = {}) {
   return {
-    controls: createControls(), track: null, samples: [], lastSeen: null,
+    options, controls: createControls(), track: null, samples: [], lastSeen: null,
     lastUpdate: null, wasPlaying: false, phase: 'waiting', progress: 0, lastReset: null
   };
 }
@@ -141,14 +141,14 @@ function trackChecks(track, p, aspect, calibrated = false) {
   };
 }
 
-function matchPlayer(track, candidates, aspect, calibrated) {
+function matchPlayer(track, candidates, aspect, calibrated, area = PLAY_AREA) {
   // Detection order is not identity. Use the previous location and acquired scale.
   let leftArea = false;
   const matches = candidates.flatMap(p => {
     const match = trackChecks(track, p, aspect, calibrated);
     if (match.checks.some(c => c.status === 'fail')) return [];
     // The player is visibly there but walked out: that is leaving, not a detection blip.
-    if (!inArea(p.x, true)) { leftArea = true; return []; }
+    if (p.x < area.exitLeft || p.x > area.exitRight) { leftArea = true; return []; }
     return [{ pose: p, score: match.score }];
   }).sort((a, b) => a.score - b.score);
   const ambiguous = matches.length > 1 && matches[1].score - matches[0].score < 0.3;
@@ -221,12 +221,13 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
 
   // Check expiry BEFORE matching: a newcomer must not revive an expired track.
   if (session.track && time - session.lastSeen >= SESSION_TIMING.departure) {
-    Object.assign(session, createPlayerSession());
+    Object.assign(session, createPlayerSession(session.options));
     result.departed = true;
     resetReason('Player absent for ' + SESSION_TIMING.departure + ' ms');
     return finish();
   }
 
+  const area = { ...PLAY_AREA, ...session.options?.area };
   const hadTrack = Boolean(session.track);
   const reports = poses.map((landmarks, index) => {
     const report = inspectPose(landmarks, aspect);
@@ -235,14 +236,14 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
         inArea(report.pose.x), 'Torso center X ' + number(report.pose.x) + '; allowed '
           + PLAY_AREA.left + '–' + PLAY_AREA.right));
       if (hadTrack) report.checks.push(check('trackingArea', 'Inside tracking area',
-        inArea(report.pose.x, true), 'Torso center X ' + number(report.pose.x) + '; allowed '
-          + PLAY_AREA.exitLeft + '–' + PLAY_AREA.exitRight),
+        report.pose.x >= area.exitLeft && report.pose.x <= area.exitRight, 'Torso center X ' + number(report.pose.x) + '; allowed '
+          + area.exitLeft + '–' + area.exitRight),
         ...trackChecks(session.track, report.pose, aspect, session.controls.ready).checks);
     }
     return { ...report, index };
   });
   const candidates = reports.map(r => r.pose).filter(Boolean);
-  const selection = hadTrack ? matchPlayer(session.track, candidates, aspect, session.controls.ready)
+  const selection = hadTrack ? matchPlayer(session.track, candidates, aspect, session.controls.ready, area)
     : acquirePlayer(candidates);
   const pose = selection.pose;
   const focus = reports.find(r => r.pose && r.pose === pose) ?? [...reports].sort((a, b) => {
@@ -364,3 +365,4 @@ export function updatePlayerSession(session, poses, time, aspect = 1, playing = 
   result.progress = session.progress;
   return finish();
 }
+
