@@ -65,3 +65,9 @@
  .runner-touch-controls { margin: 8px 0; }
  .runner-keyboard-panel h2, .runner-keyboard-panel .runner-kicker { display: none; }
 }
+.runner-setup { background: #122d3a40; }
+.runner-setup-card { max-width: min(1000px, 96%); padding: clamp(8px, 1.6vmin, 20px); }
+.runner-gameover .jump-cta { margin-top: clamp(8px, 1.6vmin, 20px); }
+@container (max-height: 320px) { .runner-setup-card .setup-hint { display: none; } }
+.runner-setup-card p.setup-title { font: inherit; font-size: clamp(14px, 3.2vmin, 44px); line-height: 1.5; margin: 0 0 clamp(10px, 1.8vmin, 24px); }
+.runner-setup-card p.setup-hint { font: 600 clamp(16px, 2.4vmin, 32px)/1.4 system-ui, sans-serif; margin: 0; }

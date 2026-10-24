@@ -94,3 +94,30 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
   .recalibrate-button { max-width: 55%; padding: 10px 8px; }
 }
 
+/* Walk-up setup guide shared by both games: matches the camera box colors. */
+.setup-guide { width: min(100%, 1000px); padding: clamp(10px, 2vmin, 28px); text-align: center; color: #3c3c3c; }
+.setup-steps { list-style: none; display: flex; justify-content: center; gap: clamp(6px, 1.4vmin, 18px); margin: 0 0 clamp(12px, 2.6vmin, 34px); padding: 0; }
+.setup-steps li { display: flex; align-items: center; gap: clamp(6px, 1vmin, 12px); padding: clamp(7px, 1.1vmin, 14px) clamp(8px, 1.4vmin, 18px); border: 3px solid #d6d6d6; border-radius: 999px; background: #fff; color: #9a9a9a; font-size: clamp(8px, 1.35vmin, 18px); line-height: 1.4; white-space: nowrap; }
+.setup-num { display: inline-grid; place-items: center; width: 2em; height: 2em; border-radius: 50%; background: #e2e2e2; color: #fff; }
+.setup-steps li.current { color: #2b2b2b; border-color: #ff9f1a; box-shadow: 0 0 0 4px #ff9f1a33; }
+.setup-steps li.current .setup-num { background: #ff9f1a; }
+.setup-steps li[data-step="2"].current { border-color: #00b979; box-shadow: 0 0 0 4px #00d68f33; }
+.setup-steps li[data-step="2"].current .setup-num, .setup-steps li[data-step="3"].current .setup-num, .setup-steps li.done .setup-num { background: #00b979; }
+.setup-steps li[data-step="3"].current { border-color: #00b979; color: #00895b; }
+.setup-steps li.done { color: #00895b; border-color: #9be8c9; }
+.setup-title { margin: 0 0 clamp(10px, 1.8vmin, 24px); font-size: clamp(14px, 3.2vmin, 44px); line-height: 1.5; }
+.setup-orange { color: #f08a00; white-space: nowrap; }
+.setup-green { color: #00a46d; white-space: nowrap; }
+.setup-hint { margin: 0; font: 600 clamp(16px, 2.4vmin, 32px)/1.4 system-ui, sans-serif; color: #555; }
+.setup-meter { width: min(520px, 80%); height: clamp(12px, 1.8vmin, 24px); margin: clamp(14px, 2.4vmin, 30px) auto 0; border-radius: 999px; background: #e3e3e3; overflow: hidden; }
+.setup-meter span { display: block; height: 100%; background: #00c482; transition: width .1s linear; }
+.setup-down { display: block; margin-top: clamp(8px, 1.6vmin, 22px); color: #ff9f1a; font: clamp(28px, 5vmin, 70px)/1 system-ui, sans-serif; animation: setup-bob 1s ease-in-out infinite; }
+.jump-cta { max-width: 100%; display: flex; align-items: center; justify-content: center; gap: clamp(8px, 2vmin, 28px); color: #fff; background: #00b979; border: 4px solid #00895b; border-radius: 18px; padding: clamp(14px, 2.6vmin, 36px) clamp(14px, 2.6vmin, 36px); box-shadow: 0 8px 0 #00895b, 0 0 40px #00d68f80; animation: jump-cta 0.9s ease-in-out infinite; }
+.jump-cta strong { font-weight: 400; font-size: clamp(20px, 5.2vmin, 76px); line-height: 1.25; text-shadow: 3px 3px 0 #00663f; }
+.jump-cta-arrow { font: clamp(20px, 4.4vmin, 64px)/1 system-ui, sans-serif; animation: setup-bob .9s ease-in-out infinite reverse; }
+.jump-cta.compact { padding: clamp(10px, 1.8vmin, 24px) clamp(14px, 2.2vmin, 30px); margin-top: clamp(10px, 2vmin, 24px); }
+.jump-cta.compact strong { font-size: clamp(16px, 4vmin, 58px); }
+@keyframes jump-cta { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.04); } }
+@keyframes setup-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .jump-cta, .jump-cta-arrow, .setup-down { animation: none; } }
+@media (max-width: 560px) { .setup-steps li > span:last-child { display: none; } }

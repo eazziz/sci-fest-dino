@@ -5,7 +5,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ZONES } from './poseControls.mjs';
-import { createPlayerSession, updatePlayerSession, PLAY_AREA, SESSION_TIMING } from './playerSession.mjs';
+import { createPlayerSession, updatePlayerSession, SESSION_TIMING } from './playerSession.mjs';
+import { drawSetupBox, drawSkeleton } from './poseOverlay';
+import SetupSteps from './SetupSteps';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import CalibrationDebug, { type DebugSnapshot } from './CalibrationDebug';
 
@@ -459,6 +461,8 @@ const createDino = (): DinoEntity => ({
 });
 
 
+const SETUP_HINTS = ['Step back a little so your hips are visible', 'One player in the middle', 'Stand naturally, facing the screen'];
+
 const DinoGame: React.FC = () => {
     // --- REFS ---
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -856,39 +860,11 @@ const DinoGame: React.FC = () => {
         }
 
         outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
-        drawPlayArea(outCtx, state.session.phase);
-        if (state.selectedLandmarks) {
-            const leftShoulder = state.selectedLandmarks[11];
-            const rightShoulder = state.selectedLandmarks[12];
-            outCtx.beginPath();
-            outCtx.moveTo(leftShoulder.x * outCanvas.width, leftShoulder.y * outCanvas.height);
-            outCtx.lineTo(rightShoulder.x * outCanvas.width, rightShoulder.y * outCanvas.height);
-            outCtx.strokeStyle = GAME_CONFIG.COLORS.ACCENT;
-            outCtx.lineWidth = 3 * outCanvas.height / 240;
-            outCtx.stroke();
-            outCtx.fillStyle = '#00FF00';
-            for (const shoulder of [leftShoulder, rightShoulder]) {
-                outCtx.beginPath();
-                outCtx.arc(shoulder.x * outCanvas.width, shoulder.y * outCanvas.height,
-                    5 * outCanvas.height / 240, 0, 2 * Math.PI);
-                outCtx.fill();
-            }
-            drawDebugOverlay(outCtx, state);
-        }
+        if (!engine.gameRunning) drawSetupBox(outCtx, state.session.phase, state.session.progress, now / 1000);
+        drawSkeleton(outCtx, state.selectedLandmarks);
+        if (state.selectedLandmarks) drawDebugOverlay(outCtx, state);
 
         engine.visionAnimationId = requestAnimationFrame(predictWebcam);
-    };
-
-    const drawPlayArea = (ctx: CanvasRenderingContext2D, phase: string) => {
-        if (phase === 'playing') return;
-        const { width: w, height: h } = ctx.canvas;
-        ctx.save();
-        ctx.strokeStyle = phase === 'ready' ? '#00cc88' : '#fbbf24';
-        ctx.lineWidth = Math.max(2, h / 160);
-        ctx.setLineDash([h / 45, h / 60]);
-        ctx.strokeRect(PLAY_AREA.left * w, h * 0.08,
-            (PLAY_AREA.right - PLAY_AREA.left) * w, h * 0.84);
-        ctx.restore();
     };
 
     const drawDebugOverlay = (ctx: CanvasRenderingContext2D, state: VisionState) => {
@@ -1073,19 +1049,8 @@ const DinoGame: React.FC = () => {
                                     </button>
                                 ) : (
                                     <>
-                                        <div className="walk-up-prompt" role="status">
-                                            <p className="walk-up-title">
-                                                {calibrated ? "READY!" : sessionPhase === 'settling'
-                                                    ? "GETTING READY…" : "STEP INTO THE MIDDLE"}
-                                            </p>
-                                            <p className="walk-up-hint">
-                                                {calibrated ? "Jump to play" : "Face the screen. We'll do the rest."}
-                                            </p>
-                                            {sessionPhase === 'settling' && (
-                                                <progress className="settle-progress" max={1} value={settleProgress}
-                                                    aria-label="Getting ready" />
-                                            )}
-                                        </div>
+                                        <SetupSteps phase={sessionPhase} progress={settleProgress} ready={calibrated}
+                                            hint={SETUP_HINTS.includes(status) ? status : undefined} />
                                     </>
                                 )}
                             </div>
@@ -1104,9 +1069,9 @@ const DinoGame: React.FC = () => {
                 {(hasStarted && !gameRunning) && (
                     <div className="absolute top-0 left-0 w-full h-full bg-black/50 flex flex-col items-center justify-center z-10 rounded-lg text-center p-2 md:p-4">
                         <div className="text-white text-xl md:text-3xl font-press-start mb-3 md:mb-6 drop-shadow-md">GAME OVER</div>
-                        <div className="text-white text-xs md:text-sm font-press-start mb-2 md:mb-4 animate-pulse drop-shadow-md">
-                            {canRestart && calibrated ? "JUMP TO RESTART" : status}
-                        </div>
+                        {canRestart && calibrated
+                            ? <div className="jump-cta compact mb-3 md:mb-6"><span className="jump-cta-arrow" aria-hidden="true">▲</span><strong>JUMP TO RESTART</strong><span className="jump-cta-arrow" aria-hidden="true">▲</span></div>
+                            : <div className="text-white font-press-start mb-2 md:mb-4 drop-shadow-md" style={{ fontSize: 'clamp(12px, 2.4vmin, 32px)', lineHeight: 1.6 }}>{status}</div>}
                         <div className="text-white/90 text-[8px] font-press-start bg-black/40 p-1 md:p-2 rounded">
                             Powered By <a href="https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker" target="_blank" rel="noopener noreferrer" className="text-[#F59E0B] no-underline hover:underline focus:outline-none focus:ring-2 focus:ring-[#F59E0B] rounded-sm">MediaPipe Pose Landmarker</a>
                         </div>

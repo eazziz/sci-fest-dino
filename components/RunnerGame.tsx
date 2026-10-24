@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import CalibrationDebug, { type DebugSnapshot } from './CalibrationDebug';
-import { createPlayerSession, updatePlayerSession, SESSION_TIMING, PLAY_AREA } from './playerSession.mjs';
+import { createPlayerSession, updatePlayerSession, SESSION_TIMING } from './playerSession.mjs';
 import { createLaneControls, calibrateLanes, updateLane, laneBoundaries, RUNNER_AREA } from './runnerControls.mjs';
 import { createRunner, startRunner, jumpRunner, stepRunner } from './runnerEngine.mjs';
 import { createRunnerScene } from './runnerScene';
+import { drawSetupBox, drawSkeleton } from './poseOverlay';
+import SetupSteps from './SetupSteps';
 import './runner.css';
 
 type Mode = 'camera' | 'keyboard';
@@ -12,8 +14,7 @@ type Actions = { camera: (device?: string) => Promise<void>; keyboard: () => voi
   reset: () => void; start: () => void; mute: () => void; lane: (lane: number) => void;
   jump: () => void; duck: (value: boolean) => void };
 const laneName = (lane: number) => ['LEFT', 'CENTER', 'RIGHT'][lane + 1];
-const CONNECTIONS = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],
-  [23,24],[23,25],[25,27],[24,26],[26,28]];
+const SETUP_HINTS = ['Step back a little so your hips are visible', 'One player in the middle', 'Stand naturally, facing the screen'];
 
 export default function RunnerGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -158,7 +159,9 @@ export default function RunnerGame() {
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
       const ctx = canvas.getContext('2d')!, w = canvas.width, h = canvas.height, scale = h / 480;
       ctx.clearRect(0, 0, w, h);
-      if (lanes.ready) {
+      if (!['countdown', 'running'].includes(engine.phase)) {
+        drawSetupBox(ctx, phase, progress, performance.now() / 1000);
+      } else if (lanes.ready) {
         const bounds = laneBoundaries(lanes), split = [0, bounds.left, bounds.right, 1];
         // Draw in display coordinates while CSS mirrors the entire canvas.
         ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1);
@@ -173,18 +176,8 @@ export default function RunnerGame() {
           ctx.fillStyle = lane === lanes.lane ? '#70ffb5' : '#ffffff'; ctx.fillText(laneName(lane), x * w, h * .88 + 16 * scale);
         }
         ctx.restore();
-      } else {
-        ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2 * scale; ctx.setLineDash([12 * scale, 9 * scale]);
-        ctx.strokeRect(PLAY_AREA.left * w, h * .10, (PLAY_AREA.right - PLAY_AREA.left) * w, h * .78); ctx.setLineDash([]);
       }
-      if (!points) return;
-      const visible = (p: any) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && (!Number.isFinite(p.visibility) || p.visibility > 0.5);
-      ctx.lineWidth = 3 * scale; ctx.strokeStyle = '#5dffac';
-      for (const [a, b] of CONNECTIONS) if (visible(points[a]) && visible(points[b])) {
-        ctx.beginPath(); ctx.moveTo(points[a].x * w, points[a].y * h); ctx.lineTo(points[b].x * w, points[b].y * h); ctx.stroke();
-      }
-      ctx.fillStyle = '#a4ffd0';
-      for (const i of new Set(CONNECTIONS.flat())) if (visible(points[i])) { ctx.beginPath(); ctx.arc(points[i].x * w, points[i].y * h, 4 * scale, 0, Math.PI * 2); ctx.fill(); }
+      drawSkeleton(ctx, points);
     }
 
     function predict(now: number) {
@@ -299,15 +292,19 @@ export default function RunnerGame() {
         <canvas ref={canvasRef} className="runner-canvas" aria-label="Three-lane campus runner" />
         <div className="runner-score" aria-label="Game score"><span>SCORE {String(ui.score).padStart(5, '0')}</span><span className="runner-coins">● {ui.coins}</span><small>BEST {String(ui.best).padStart(5, '0')}</small></div>
         {ui.fatal ? <div className="runner-screen"><div className="runner-card"><h2>GRAPHICS INTERRUPTED</h2><p role="alert">{ui.fatal}</p><button onClick={() => location.reload()}>RELOAD GAME</button></div></div>
+          : ui.phase === 'idle' && cameraMode && ui.cameraReady ? <div className="runner-screen runner-setup"><div className="runner-card runner-setup-card">
+            <SetupSteps phase={ui.sessionPhase} progress={ui.progress} ready={ui.ready && ui.tracked}
+              hint={SETUP_HINTS.includes(ui.status) ? ui.status : undefined} />
+            {ui.error && <p className="runner-error" role="alert">{ui.error}</p>}
+          </div></div>
           : ui.phase === 'idle' ? <div className="runner-screen"><div className="runner-card">
             <span className="runner-kicker">YOUR BODY IS THE CONTROLLER</span>
-            <h2>{!cameraMode ? 'READY TO RUN?' : ui.ready ? 'READY!' : ui.cameraStarting ? 'GETTING READY…' : ui.cameraReady ? ui.sessionPhase === 'settling' ? 'STAND NATURALLY' : 'STEP INTO THE MIDDLE' : 'STEP IN. RUN.'}</h2>
-            <p>{!cameraMode ? 'Dodge traffic, jump barriers, duck gates. Keep going.' : ui.cameraReady ? ui.ready ? 'Jump to play' : 'Face the screen. We’ll do the rest.' : 'Move left & right, jump, and duck to play.'}</p>
-            {cameraMode && !ui.cameraReady && <button className="runner-primary" disabled={ui.cameraStarting} onClick={() => void actionRef.current?.camera()}>{ui.cameraStarting ? 'OPENING CAMERA…' : 'ENABLE CAMERA'}</button>}
-            {cameraMode && ui.sessionPhase === 'settling' && <progress className="settle-progress" max={1} value={ui.progress} aria-label="Automatic calibration" />}
+            <h2>{!cameraMode ? 'READY TO RUN?' : ui.cameraStarting ? 'GETTING READY…' : 'STEP IN. RUN.'}</h2>
+            <p>{!cameraMode ? 'Dodge traffic, jump barriers, duck gates. Keep going.' : 'Move left & right, jump, and duck to play.'}</p>
+            {cameraMode && <button className="runner-primary" disabled={ui.cameraStarting} onClick={() => void actionRef.current?.camera()}>{ui.cameraStarting ? 'OPENING CAMERA…' : 'ENABLE CAMERA'}</button>}
             {!cameraMode && <button className="runner-primary" onClick={() => actionRef.current?.start()}>START RUN</button>}
             {ui.error && <p className="runner-error" role="alert">{ui.error}</p>}
-            {cameraMode && !ui.cameraReady && <button className="runner-text-button" disabled={ui.cameraStarting} onClick={() => actionRef.current?.keyboard()}>TRY WITH KEYBOARD</button>}
+            {cameraMode && <button className="runner-text-button" disabled={ui.cameraStarting} onClick={() => actionRef.current?.keyboard()}>TRY WITH KEYBOARD</button>}
           </div></div> : null}
         {active && cameraMode && !ui.tracked && <div className="tracking-pause"><p>WAITING FOR YOU</p><span>Step back into view to keep running.</span></div>}
         {ui.phase === 'countdown' && (!cameraMode || ui.tracked) && <div className="runner-countdown" role="status"><strong>{ui.countdown}</strong><span>GET READY</span></div>}
@@ -315,7 +312,9 @@ export default function RunnerGame() {
           <span className="runner-kicker">NICE RUN!</span><h2>GAME OVER</h2>
           <div className="runner-results"><span>{ui.score}<small>SCORE</small></span><span>{ui.coins}<small>COINS</small></span></div>
           <p>{ui.crash}</p>
-          <strong className="runner-retry">{cameraMode ? ui.ready && ui.tracked ? 'JUMP TO RESTART' : 'STAND IN THE MIDDLE' : 'SPACE TO RESTART'}</strong>
+          {cameraMode && ui.ready && ui.tracked
+            ? <div className="jump-cta compact"><span className="jump-cta-arrow" aria-hidden="true">▲</span><strong>JUMP TO RESTART</strong><span className="jump-cta-arrow" aria-hidden="true">▲</span></div>
+            : <strong className="runner-retry">{cameraMode ? 'STAND IN THE ORANGE BOX' : 'SPACE TO RESTART'}</strong>}
           {!cameraMode && <button onClick={() => actionRef.current?.start()}>RUN AGAIN</button>}
           {cameraMode && ui.sessionPhase === 'settling' && <progress className="settle-progress" max={1} value={ui.progress} aria-label="Recalibrating" />}
         </div></div>}
