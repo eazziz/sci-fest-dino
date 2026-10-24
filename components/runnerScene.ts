@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RUNNER, createRunner } from './runnerEngine.mjs';
+import { RUNNER, createRunner, isVehicle } from './runnerEngine.mjs';
 import { createSoftwareRenderer } from './runnerSoftwareRenderer';
 
 type Runner = ReturnType<typeof createRunner>;
@@ -143,13 +143,48 @@ export function createRunnerScene(canvas: HTMLCanvasElement) {
   const coinGeometry = new THREE.CylinderGeometry(0.32, 0.32, 0.10, 12);
   const coinFace = new THREE.CylinderGeometry(0.23, 0.23, 0.115, 12);
   const objectMeshes = new Map<number, THREE.Group>();
-  const pools: Record<string, THREE.Group[]> = { coin: [], block: [], hurdle: [], gate: [] };
+  const pools: Record<string, THREE.Group[]> = { coin: [], block: [], hurdle: [], gate: [], bus: [], truck: [] };
+  const lamp = new THREE.MeshBasicMaterial({ color: '#fff6b8' });
+  const wheelGeometry = new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10);
+  const hubGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.32, 8);
+  // Vehicles face the player: front bumper at local z = 0, body extends to -length.
+  function vehicle(g: THREE.Group, kind: string) {
+    const wheels = (zs: number[]) => { for (const z of zs) for (const side of [-1, 1]) {
+      const w = mesh(g, wheelGeometry, '#20262c', side * 0.86, 0.42, z, true); w.rotation.z = Math.PI / 2;
+      mesh(g, hubGeometry, '#a9b3ba', side * 0.86, 0.42, z).rotation.z = Math.PI / 2;
+    } };
+    const lights = (y: number, z: number) => { for (const side of [-1, 1]) {
+      const l = new THREE.Mesh(cube, lamp); l.position.set(side * 0.62, y, z); l.scale.set(0.34, 0.24, 0.05); g.add(l);
+    } };
+    if (kind === 'bus') {
+      box(g, '#f6b81d', 0, 1.65, -2.8, 1.9, 2.3, 5.6, true);
+      box(g, '#fbd04a', 0, 2.86, -2.8, 1.7, 0.14, 5.3, true);
+      box(g, '#27323b', 0, 1.0, -2.8, 1.94, 0.12, 5.64);
+      box(g, '#2c4f63', 0, 2.05, 0.01, 1.6, 0.85, 0.04);            // windshield
+      box(g, '#f8e7b0', 0, 2.62, 0.02, 1.1, 0.24, 0.03);            // destination sign
+      for (const side of [-1, 1]) for (let i = 0; i < 4; i++) box(g, '#2c4f63', side * 0.96, 2.05, -0.9 - i * 1.25, 0.03, 0.62, 0.95);
+      box(g, '#2d2f33', 0, 0.62, 0.06, 1.95, 0.32, 0.18);           // bumper
+      box(g, '#e3e6e8', 0, 1.0, 0.03, 0.9, 0.22, 0.03);             // grille
+      lights(1.0, 0.04); wheels([-1.0, -4.5]);
+    } else {
+      box(g, '#d8313b', 0, 1.45, -0.8, 1.85, 1.9, 1.6, true);        // cab
+      box(g, '#b22432', 0, 2.48, -0.95, 1.6, 0.2, 1.2, true);
+      box(g, '#2c4f63', 0, 1.88, 0.01, 1.55, 0.72, 0.04);
+      box(g, '#f1f2ee', 0, 1.95, -2.9, 1.95, 2.9, 2.6, true);        // cargo box
+      box(g, '#2f8fd0', 0, 2.0, -2.9, 1.98, 0.5, 2.3);
+      box(g, '#2d2f33', 0, 0.62, 0.06, 1.95, 0.32, 0.18);
+      box(g, '#a7b0b6', 0, 1.05, 0.03, 1.1, 0.42, 0.03);
+      lights(1.05, 0.04); wheels([-0.9, -3.4]);
+    }
+  }
   function createObject(kind: string) {
     const g = new THREE.Group(); g.userData.kind = kind;
     if (kind === 'coin') {
       const rim = mesh(g, coinGeometry, '#ffa600', 0, 0, 0); rim.rotation.x = Math.PI / 2;
       const face = mesh(g, coinFace, '#ffdc39', 0, 0, 0); face.rotation.x = Math.PI / 2;
       box(g, '#fff1a6', 0, 0, 0.063, 0.05, 0.28, 0.012);
+    } else if (isVehicle(kind)) {
+      vehicle(g, kind);
     } else if (kind === 'block') {
       box(g, '#ed6b20', 0, 1.15, 0, 1.72, 2.3, 1.35, true);
       box(g, '#ffa52c', 0, 2.33, 0, 1.8, 0.15, 1.45, true);
@@ -176,6 +211,7 @@ export function createRunnerScene(canvas: HTMLCanvasElement) {
     { id: -1, kind: 'block', lane: -1, z: 12, done: false },
     { id: -2, kind: 'hurdle', lane: 0, z: 27, done: false },
     { id: -3, kind: 'gate', lane: 1, z: 45, done: false },
+    { id: -4, kind: 'bus', lane: -1, z: 32, done: false },
     ...Array.from({ length: 7 }, (_, i) => ({ id: -10 - i, kind: 'coin', lane: 1, z: 6 + i * 2.3, done: false }))
   ];
 
@@ -206,7 +242,7 @@ export function createRunnerScene(canvas: HTMLCanvasElement) {
     shadow.position.x = s.x;
     shadow.scale.setScalar(1 - Math.min(0.4, s.y * 0.15));
     const activeObjects = idle ? demoObjects : s.objects;
-    const ids = new Set(activeObjects.filter(o => !(o.kind === 'coin' && o.done)).map(o => o.id));
+    const ids = new Set<number>(activeObjects.filter(o => !(o.kind === 'coin' && o.done)).map(o => o.id));
     for (const [id, g] of objectMeshes) if (!ids.has(id)) {
       scene.remove(g); pools[g.userData.kind].push(g); objectMeshes.delete(id);
     }
@@ -216,6 +252,8 @@ export function createRunnerScene(canvas: HTMLCanvasElement) {
       if (!g) { g = pools[o.kind].pop() ?? createObject(o.kind); objectMeshes.set(o.id, g); scene.add(g); }
       g.position.set(o.lane * RUNNER.laneWidth, o.kind === 'coin' ? 1.05 + Math.sin(time * 3 + o.id) * 0.08 : 0.05, -o.z);
       g.rotation.y = o.kind === 'coin' ? time * 2.6 : 0;
+      // Slight engine bob makes traffic read as driving, not sliding scenery.
+      if (isVehicle(o.kind)) g.position.y = 0.05 + Math.abs(Math.sin(time * 9 + o.id)) * 0.04;
       g.visible = true;
     }
     renderer.render(scene, camera);

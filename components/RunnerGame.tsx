@@ -50,8 +50,22 @@ export default function RunnerGame() {
     try { scene = createRunnerScene(canvasRef.current!); }
     catch { fatal = 'The 3D game could not start. Enable hardware acceleration in your browser and reload.'; }
 
-    const sound = (type: 'coin' | 'jump' | 'crash' | 'start') => {
+    const sound = (type: 'coin' | 'jump' | 'crash' | 'start' | 'horn') => {
       if (!audio || audio.state !== 'running' || muted) return;
+      if (type === 'horn') {
+        // Two-tone "beep beep" so players hear traffic before it reaches them.
+        const now = audio.currentTime;
+        for (const [offset, freq] of [[0, 392], [0, 494], [0.2, 392], [0.2, 494]]) {
+          const osc = audio.createOscillator(), gain = audio.createGain();
+          osc.type = 'square'; osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.025, now + offset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.15);
+          osc.connect(gain); gain.connect(audio.destination); osc.start(now + offset); osc.stop(now + offset + 0.16);
+          osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        }
+        return;
+      }
       const osc = audio.createOscillator(), gain = audio.createGain(), now = audio.currentTime;
       const notes = { coin: [880, 1320, 0.09], jump: [260, 620, 0.15], crash: [150, 45, 0.3], start: [440, 880, 0.2] };
       const [from, to, duration] = notes[type];
@@ -237,6 +251,7 @@ export default function RunnerGame() {
           duck: mode === 'keyboard' ? keyboardDuck : engine.duck,
           paused: mode === 'camera' && !tracked });
         if (engine.collected.length) sound('coin');
+        if (engine.honks.length) sound('horn');
         if (prior !== 'over' && engine.phase === 'over') {
           sound('crash'); restartAt = now + 1000;
           if (engine.score > best) { best = engine.score; try { localStorage.setItem('science-fest-runner-best', String(best)); } catch { /* optional */ } }
@@ -287,7 +302,7 @@ export default function RunnerGame() {
           : ui.phase === 'idle' ? <div className="runner-screen"><div className="runner-card">
             <span className="runner-kicker">YOUR BODY IS THE CONTROLLER</span>
             <h2>{!cameraMode ? 'READY TO RUN?' : ui.ready ? 'READY!' : ui.cameraStarting ? 'GETTING READY…' : ui.cameraReady ? ui.sessionPhase === 'settling' ? 'STAND NATURALLY' : 'STEP INTO THE MIDDLE' : 'STEP IN. RUN.'}</h2>
-            <p>{!cameraMode ? 'Move between three lanes. Collect coins. Keep going.' : ui.cameraReady ? ui.ready ? 'Jump to play' : 'Face the screen. We’ll do the rest.' : 'Move left & right, jump, and duck to play.'}</p>
+            <p>{!cameraMode ? 'Dodge traffic, jump barriers, duck gates. Keep going.' : ui.cameraReady ? ui.ready ? 'Jump to play' : 'Face the screen. We’ll do the rest.' : 'Move left & right, jump, and duck to play.'}</p>
             {cameraMode && !ui.cameraReady && <button className="runner-primary" disabled={ui.cameraStarting} onClick={() => void actionRef.current?.camera()}>{ui.cameraStarting ? 'OPENING CAMERA…' : 'ENABLE CAMERA'}</button>}
             {cameraMode && ui.sessionPhase === 'settling' && <progress className="settle-progress" max={1} value={ui.progress} aria-label="Automatic calibration" />}
             {!cameraMode && <button className="runner-primary" onClick={() => actionRef.current?.start()}>START RUN</button>}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRunner, startRunner, jumpRunner, stepRunner, makePattern, RUNNER } from './runnerEngine.mjs';
+import { createRunner, startRunner, jumpRunner, stepRunner, makePattern, RUNNER, difficulty } from './runnerEngine.mjs';
 import { createLaneControls, calibrateLanes, updateLane, laneBoundaries, RUNNER_AREA } from './runnerControls.mjs';
 import { createPlayerSession, updatePlayerSession } from './playerSession.mjs';
 
@@ -69,14 +69,74 @@ test('coins score once, death freezes score, restart clears the old round', () =
   stepRunner(s, .1); assert.equal(s.score, score);
   startRunner(s); assert.equal(s.coins, 0); assert.equal(s.score, 0); assert.equal(s.objects.length, 0);
 });
-test('hundreds of generated rows have a clear coin lane and enough recovery time', () => {
+test('hundreds of generated rows leave one passable lane with coins and recovery time', () => {
   let seed = 7125; const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  for (let n = 0; n < 500; n++) {
-    const s = createRunner(); s.elapsed = n; makePattern(s, random);
-    const blocked = new Set(s.objects.filter(o => o.kind !== 'coin').map(o => o.lane));
-    assert.ok(blocked.size <= 2); assert.ok(s.spawnIn >= 2.3);
-    assert.ok(s.objects.filter(o => o.kind === 'coin').every(o => !blocked.has(o.lane)));
+  for (let n = 0; n < 1500; n++) {
+    const s = createRunner(); s.elapsed = n % 150; s.speed = Math.min(RUNNER.maxSpeed, 13 + s.elapsed * RUNNER.speedRamp);
+    s.lastOpen = [-1, 0, 1][n % 3]; makePattern(s, random);
+    const solid = new Set(s.objects.filter(o => ['block', 'bus', 'truck'].includes(o.kind)).map(o => o.lane));
+    assert.ok(solid.size <= 2); assert.ok(s.spawnIn >= 1.5);
+    const coins = s.objects.filter(o => o.kind === 'coin');
+    assert.ok(coins.every(o => !solid.has(o.lane)));
+    // Everything in a row reaches the player together, including faster vehicles.
+    const arrival = s.objects.filter(o => o.kind !== 'coin').map(o => o.z / (s.speed + o.vz));
+    assert.ok(arrival.every(t => Math.abs(t - arrival[0]) < 1e-9));
+    if (s.elapsed < 10) assert.ok(s.objects.every(o => ['block', 'coin'].includes(o.kind)));
   }
+});
+test('oncoming vehicles approach faster than scenery and their whole length collides', () => {
+  const s = running(); s.objects.push({ ...obstacle('bus', 0, 30), vz: 8 });
+  const z = s.objects[0].z; stepRunner(s, .1);
+  assert.ok(z - s.objects[0].z > s.speed * .1 + .5);
+  const side = running(); side.objects.push({ ...obstacle('truck', 0, -3), vz: 8 });
+  stepRunner(side, .01); assert.equal(side.phase, 'over'); assert.match(side.crash, /truck/);
+  const jumper = running(); jumper.y = 2; jumper.objects.push({ ...obstacle('bus', 0, .3), vz: 8 });
+  stepRunner(jumper, .01); assert.equal(jumper.phase, 'over');
+});
+
+// A careful player with human reaction time: waits before reacting to a row, moves
+// at the game's lane speed, then jumps or ducks only when the obstacle is close.
+function bot(s, reaction) {
+  const ahead = s.objects.filter(o => o.kind !== 'coin' && !o.done && o.z > -RUNNER.hitDepth);
+  const rows = new Map();
+  for (const o of ahead) { const t = o.z / (s.speed + o.vz); const r = rows.get(o.row) ?? { t, items: [] }; r.t = Math.min(r.t, t); r.items.push(o); rows.set(o.row, r); }
+  const next = [...rows.values()].sort((a, b) => a.t - b.t)[0];
+  const input = { lane: s.lane, duck: false };
+  if (!next) return input;
+  if (next.items[0].spawnedAt === undefined) next.items.forEach(o => o.spawnedAt ??= s.elapsed);
+  if (s.elapsed - next.items[0].spawnedAt >= reaction) {
+    const solid = new Set(next.items.filter(o => ['block','bus','truck'].includes(o.kind)).map(o => o.lane));
+    const target = [-1, 0, 1].find(l => !solid.has(l));
+    // Wait for a passing vehicle's tail to clear before cutting across its lane.
+    const tail = s.objects.some(o => o.vz && o.z < RUNNER.hitDepth && o.z + 6 > -RUNNER.hitDepth
+      && o.lane >= Math.min(s.lane, target) && o.lane <= Math.max(s.lane, target));
+    if (!tail) input.lane = target;
+  }
+  const mine = next.items.find(o => o.lane === input.lane && ['hurdle', 'gate'].includes(o.kind));
+  if (mine?.kind === 'hurdle' && next.t < .3) jumpRunner(s);
+  if (mine?.kind === 'gate' && next.t < .45) input.duck = true;
+  return input;
+}
+test('every pattern is beatable with a 0.75 s reaction time for two minutes', () => {
+  for (let seedStart = 1; seedStart <= 40; seedStart++) {
+    let seed = seedStart; const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const s = createRunner(); startRunner(s);
+    for (let i = 0; i < 60 * 125 && s.phase !== 'over'; i++) {
+      for (const o of s.objects) o.spawnedAt ??= s.elapsed;
+      stepRunner(s, 1 / 60, bot(s, .75), random);
+    }
+    assert.notEqual(s.phase, 'over', `seed ${seedStart} crashed at ${s.elapsed.toFixed(1)}s: ${s.crash}`);
+  }
+});
+test('standing still loses quickly once the warm-up is over', () => {
+  const times = [];
+  for (let seedStart = 1; seedStart <= 30; seedStart++) {
+    let seed = seedStart; const random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const s = createRunner(); startRunner(s);
+    for (let i = 0; i < 60 * 120 && s.phase !== 'over'; i++) stepRunner(s, 1 / 60, {}, random);
+    times.push(s.elapsed);
+  }
+  assert.ok(Math.max(...times) < 20, times.join(','));
 });
 
 const aspect = 4/3;
