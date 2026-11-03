@@ -1,8 +1,8 @@
-# Science Fest Games
+# Lane Runner
 
 **Your body is the controller.** Move between lanes, jump over barriers, and duck under gates using an ordinary webcam.
 
-Lane Runner is a three-lane endless runner built with computer vision. This repository also includes Dino Jump, a body-controlled dinosaur game. Created by [Edred Azziz](https://github.com/eazziz) and demonstrated at Indiana University Science Fest 2026.
+Lane Runner is a three-lane endless runner built with computer vision. Created by [Edred Azziz](https://github.com/eazziz) and demonstrated at Indiana University Science Fest 2026.
 
 ![Lane Runner gameplay preview](docs/lane-runner-preview.jpg)
 
@@ -23,10 +23,10 @@ You need **Node.js 22 or newer**, npm (included with Node.js), a modern browser,
 
    ```sh
    npm ci
-   npm run dev:runner
+   npm run dev
    ```
 
-3. The browser should open to **http://localhost:3000/?game=runner**. If Vite uses a different port, use the URL it prints and add `?game=runner`.
+3. The browser should open to **http://localhost:3000/**. If Vite uses a different port, use the URL it prints.
 4. Click **Enable Camera**, allow camera access, and step into the middle of the camera view. Keep your head, shoulders, and hips visible. Stand naturally while it calibrates, then jump to start.
 
 Prefer to try it without a webcam? Click **Try with Keyboard** on Lane Runner's opening screen, then **Start Run**.
@@ -39,10 +39,6 @@ Prefer to try it without a webcam? Click **Try with Keyboard** on Lane Runner's 
 | Retry after a crash | Return to the middle, let it recalibrate, then jump | Space |
 
 Clear enough room to move comfortably. Use **Full Screen** for an event display and **Sound** to toggle audio. Stop the development server with Ctrl+C.
-
-### Dino Jump
-
-Run `npm run dev` and open **http://localhost:3000/**. Enable the camera, stand in the middle for calibration, then jump to begin. Jump over ground obstacles and duck under flying obstacles. The root URL continues to open Dino Jump; `?game=runner` selects Lane Runner.
 
 ## Using it at an event or in a classroom
 
@@ -75,7 +71,7 @@ npm run build
 npm run preview
 ```
 
-Open the preview URL Vite prints, adding `?game=runner` for Lane Runner. This previews the production build locally; it is not a public hosted demo.
+Open the preview URL Vite prints. This previews the production build locally; it is not a public hosted demo.
 
 For public hosting, upload the contents of `dist/` to a static host with HTTPS. **Deploy at the domain root**, because asset paths currently start with `/models`, `/wasm`, and `/fonts`. Hosting under a subdirectory such as `username.github.io/sci-fest-dino/` needs asset-path changes first. Do not open `index.html` directly from disk.
 
@@ -85,14 +81,13 @@ MediaPipe estimates body landmarks from webcam frames. A shared player session c
 
 | File | Purpose |
 | --- | --- |
-| `App.tsx` | Selects the game using the `game` query parameter |
+| `App.tsx` | Renders Lane Runner at the root URL |
 | `components/RunnerGame.tsx` | Camera, input, audio, and Lane Runner UI |
 | `components/runnerEngine.mjs` | Runner rules, collisions, and obstacle patterns |
 | `components/runnerScene.ts` | Procedural 3D scene and animation |
 | `components/playerSession.mjs` | Player selection and automatic calibration |
 | `components/poseControls.mjs` | Jump and duck detection |
 | `components/runnerControls.mjs` | Body movement to lane selection |
-| `components/DinoGame.tsx` | Dino Jump |
 | `public/` | Local pose model, WASM runtime, font, and license notices |
 
 ## Contribute

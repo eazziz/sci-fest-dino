@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping make these games easier to play, teach with, and adapt.
+Thanks for helping make Lane Runner easier to play, teach with, and adapt.
 
 ## Local setup
 
@@ -8,10 +8,10 @@ Use Node.js 22 or newer. Fork the repository, clone your fork, and create a bran
 
 ```sh
 npm ci
-npm run dev:runner
+npm run dev
 ```
 
-Use the root URL for Dino Jump and `?game=runner` for Lane Runner. See the [README](README.md) for camera setup.
+Open the local URL printed by Vite. See the [README](README.md) for camera setup.
 
 ## Before opening a pull request
 
@@ -29,7 +29,7 @@ Keep generated `dist/` output and `node_modules/` out of commits. Keep `package-
 
 [Open an issue](https://github.com/eazziz/sci-fest-dino/issues/new/choose) with:
 
-- Which game and input mode you used.
+- Which input mode you used (camera or keyboard).
 - Your browser, operating system, webcam, and display orientation.
 - Steps to reproduce, what you expected, and what happened.
 - Any browser-console errors. For tracking issues, include the Debug panel's failing check if available.

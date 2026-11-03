@@ -16,7 +16,6 @@ Describe what you expected and what happened instead.
 
 ## Setup
 
-- Game: Lane Runner / Dino Jump
 - Input: camera / keyboard
 - Browser and version:
 - Operating system:

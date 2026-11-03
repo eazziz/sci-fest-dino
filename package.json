@@ -1,15 +1,14 @@
 {
-  "name": "dino-jump!",
+  "name": "lane-runner",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "test": "node --test components/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "dev": "vite",
+    "dev": "vite --open",
     "build": "vite build",
-    "preview": "vite preview",
-    "dev:runner": "vite --open /?game=runner"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.8",
