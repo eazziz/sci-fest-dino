@@ -1,4 +1,4 @@
-/* The existing tv-layout, header, font, instructions and camera styles are shared. */
+/* Base display, header, font, instructions, and camera styles are in index.css. */
 .runner-canvas { display: block; width: 100%; height: 100%; outline: none; }
 .runner-stage { background: #9bdcf4; isolation: isolate; container-type: size; }
 .runner-score { position: absolute; top: 16px; right: 18px; display: grid; grid-template-columns: auto auto; gap: 10px 20px; color: white; text-shadow: 2px 2px 0 #263d54; font-size: clamp(10px, 1.6vmin, 22px); pointer-events: none; z-index: 1; }

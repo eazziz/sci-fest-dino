@@ -36,7 +36,6 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .display-controls button:hover { background: #ededed; }
 .display-message { text-align: center; font: 14px system-ui, sans-serif; }
 .game-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-.game-canvas { position: absolute; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
 /* Big enough to read from the queue on a portrait TV; one instruction per line so the
    wide pixel font never overflows (16 characters ≈ 16em). */
 .game-instructions { margin: 0; padding: clamp(10px, 2.2vmin, 28px); text-align: center; font-size: clamp(14px, 3.4vmin, 48px); line-height: 1.6; }
@@ -60,9 +59,6 @@ button:focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
 .camera-placeholder p { font-size: clamp(12px, 2vmin, 26px); }
 .camera-placeholder > span:last-child { font: clamp(14px, 1.8vmin, 22px)/1.5 system-ui, sans-serif; color: #a7b4b8; }
 .camera-symbol { color: #fbbf24; font: clamp(40px, 8vmin, 110px)/1 system-ui, sans-serif; }
-.walk-up-prompt { padding: 24px; text-align: center; }
-.walk-up-title { font-size: clamp(12px, 2vmin, 26px); line-height: 1.8; margin: 0 0 20px; }
-.walk-up-hint { font: clamp(16px, 2vmin, 26px)/1.5 system-ui, sans-serif; margin: 0; }
 .settle-progress { display: block; width: min(240px, 65vw); height: 8px; margin: 24px auto 0; accent-color: #00a877; }
 .tracking-pause { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #fffd; text-align: center; padding: 24px; z-index: 10; }
 .tracking-pause p { font-size: clamp(12px, 2vmin, 24px); line-height: 1.8; margin: 0; }

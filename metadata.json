@@ -1,6 +1,6 @@
 {
-  "name": "Dino Jump!",
-  "description": "Burn calories, not just time! Experience the Chrome-Dino-like game powered by MediaPipe - jump in real life to dodge cacti!",
+  "name": "Lane Runner",
+  "description": "A body-controlled three-lane endless runner. Move left and right, jump, and duck using an ordinary webcam and local pose tracking.",
   "requestFramePermissions": [
     "camera"
   ],
